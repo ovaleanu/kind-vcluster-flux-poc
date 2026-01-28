@@ -61,7 +61,12 @@ KIND_CONFIG ?= hack/config/kind.yaml
 
 .PHONY: cluster
 cluster: kind ## Provision kind cluster.
-	$(KIND) create cluster --name $(CLUSTER) --config $(KIND_CONFIG)
+	@if $(KIND) get clusters 2>/dev/null | grep -q "^$(CLUSTER)$$"; then \
+		echo "Cluster '$(CLUSTER)' already exists, skipping creation..."; \
+	else \
+		echo "Creating cluster '$(CLUSTER)'..."; \
+		$(KIND) create cluster --name $(CLUSTER) --config $(KIND_CONFIG); \
+	fi
 
 .PHONY: cluster-delete
 cluster-delete: kind ## Delete kind cluster.
@@ -70,6 +75,16 @@ cluster-delete: kind ## Delete kind cluster.
 .PHONY: cluster-ctx
 cluster-ctx: ## Set cluster context.
 	@kubectl config use-context kind-$(CLUSTER)
+
+.PHONY: cluster-status
+cluster-status: kind ## Check if cluster exists.
+	@if $(KIND) get clusters 2>/dev/null | grep -q "^$(CLUSTER)$$"; then \
+		echo "✓ Cluster '$(CLUSTER)' is running"; \
+		$(KIND) get clusters | grep "$(CLUSTER)"; \
+	else \
+		echo "✗ Cluster '$(CLUSTER)' does not exist"; \
+		exit 1; \
+	fi
 
 ##@ Tooling
 
