@@ -29,6 +29,13 @@ spec:
             value: /data/k3s-config/kube-config.yaml
           - name: K3S_KUBECONFIG_MODE
             value: "644"
+      proxy:
+        extraSANs:
+          - 172.18.0.210
+    external:
+      platform:
+        apiServerHost: 172.18.0.210
+        apiServerPort: 443
     sync:
       toHost:
         pods:
