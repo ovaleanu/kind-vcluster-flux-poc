@@ -12,45 +12,34 @@ spec:
       version: "0.30.4"
   interval: 5m
   values:
-    service:
-      type: LoadBalancer
-    syncer:
-      serviceAnnotations:
-        metallb.universe.tf/loadBalancerIPs: 172.18.0.210
-      extraArgs:
-      - --tls-san=172.18.0.210
-      - --out-kube-config-server=https://172.18.0.210
+    controlPlane:
+      service:
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: 172.18.0.210
+        spec:
+          type: LoadBalancer
+      distro:
+        k3s:
+          enabled: true
+          extraArgs:
+            - --tls-san=172.18.0.210
+      statefulSet:
+        env:
+          - name: K3S_KUBECONFIG_OUTPUT
+            value: /data/k3s-config/kube-config.yaml
+          - name: K3S_KUBECONFIG_MODE
+            value: "644"
     sync:
-      generic:
-        clusterRole:
-          extraRules:
-            - apiGroups:
-                - apiextensions.k8s.io
-              resources:
-                - customresourcedefinitions
-              verbs:
-                - get
-                - list
-                - watch
-        role:
-          extraRules:
-            - apiGroups:
-                - gateway.networking.k8s.io  
-              resources:
-                - httproutes 
-              verbs:
-                - create
-                - delete
-                - patch
-                - update
-                - get
-                - list
-                - watch
-        config: |-
-          version: v1beta1
-          export:
-            - apiVersion: gateway.networking.k8s.io/v1
-              kind: HTTPRoute 
-              patches:
-                - op: rewriteName
-                  path: .spec.rules[*].backendRefs[*].name
+      toHost:
+        pods:
+          enabled: true
+        services:
+          enabled: true
+        configMaps:
+          enabled: true
+        secrets:
+          enabled: true
+        endpoints:
+          enabled: true
+        persistentVolumeClaims:
+          enabled: true

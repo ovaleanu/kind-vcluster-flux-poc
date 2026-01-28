@@ -12,102 +12,40 @@ spec:
       version: "0.30.4"
   interval: 5m
   values:
-    service:
-      type: LoadBalancer
-    syncer:
-      serviceAnnotations:
-        metallb.universe.tf/loadBalancerIPs: 172.18.0.211
-      extraArgs:
-      - --tls-san=172.18.0.211
-      - --out-kube-config-server=https://172.18.0.211
-    multiNamespaceMode:
-      enabled: true
+    controlPlane:
+      service:
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: 172.18.0.211
+        spec:
+          type: LoadBalancer
+      distro:
+        k3s:
+          enabled: true
+          extraArgs:
+            - --tls-san=172.18.0.211
+      statefulSet:
+        env:
+          - name: K3S_KUBECONFIG_OUTPUT
+            value: /data/k3s-config/kube-config.yaml
+          - name: K3S_KUBECONFIG_MODE
+            value: "644"
     sync:
-      storageclasses:
-        enabled: true
-      nodes:
-        enabled: true
-        syncAllNodes: true
-      generic:
-        clusterRole:
-          extraRules:
-            - apiGroups:
-                - apiextensions.k8s.io
-              resources:
-                - customresourcedefinitions
-              verbs:
-                - get
-                - list
-                - watch
-        role:
-          extraRules:
-            - apiGroups:
-                - gateway.networking.k8s.io  
-              resources:
-                - httproutes 
-              verbs:
-                - create
-                - delete
-                - patch
-                - update
-                - get
-                - list
-                - watch
-            - apiGroups:
-                - monitoring.coreos.com
-              resources:
-                - servicemonitors 
-              verbs:
-                - create
-                - delete
-                - patch
-                - update
-                - get
-                - list
-                - watch
-            - apiGroups:
-                - cert-manager.io
-              resources:
-                - certificates
-                - issuers
-                - clusterissuers
-              verbs:
-                - create
-                - delete
-                - patch
-                - update
-                - get
-                - list
-                - watch
-        config: |-
-          version: v1beta1
-          export:
-            - apiVersion: gateway.networking.k8s.io/v1
-              kind: HTTPRoute 
-              patches:
-                - op: rewriteName
-                  path: .spec.rules[*].backendRefs[*].name
-            - apiVersion: monitoring.coreos.com/v1
-              kind: ServiceMonitor
-              patches:
-                - op: add
-                  path: .metadata.labels
-                  value:
-                    release: kube-prometheus-stack
-                - op: copyFromObject
-                  fromPath: .metadata.labels['release'] 
-                  path: .metadata.labels['release']
-                - op: replace
-                  path: .spec.namespaceSelector
-                  value:
-                    any: true
-            - apiVersion: cert-manager.io/v1
-              kind: Certificate
-            - apiVersion: cert-manager.io/v1
-              kind: Issuer
-            - apiVersion: cert-manager.io/v1
-              kind: ClusterIssuer
-          import:
-            - apiVersion: v1
-              kind: Secret
-              
+      toHost:
+        pods:
+          enabled: true
+        services:
+          enabled: true
+        configMaps:
+          enabled: true
+        secrets:
+          enabled: true
+        endpoints:
+          enabled: true
+        persistentVolumeClaims:
+          enabled: true
+      fromHost:
+        nodes:
+          enabled: true
+          syncBackChanges: false
+        storageClasses:
+          enabled: true
