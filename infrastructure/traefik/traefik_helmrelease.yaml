@@ -28,8 +28,8 @@ spec:
         port: 8080
         expose:
           default: true
-        redirections:
-          http:
+        http:
+          redirections:
             entryPoint:
               to: websecure
               scheme: https
