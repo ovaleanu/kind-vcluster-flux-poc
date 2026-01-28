@@ -4,3 +4,4 @@ namespace: traefik
 resources:
   - traefik_certificate.yaml
   - traefik_ingressroute.yaml
+  - referencegrant.yaml
