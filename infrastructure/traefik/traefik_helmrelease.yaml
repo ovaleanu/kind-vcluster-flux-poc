@@ -25,7 +25,19 @@ spec:
       isDefaultClass: true
     ports:
       web:
-        redirectTo: websecure
+        port: 8080
+        expose:
+          default: true
+        redirections:
+          http:
+            entryPoint:
+              to: websecure
+              scheme: https
+              permanent: true
+      websecure:
+        port: 8443
+        expose:
+          default: true
     providers:
       kubernetesCRD:
         enabled: true
@@ -40,5 +52,6 @@ spec:
     service:
       annotations:
         metallb.universe.tf/loadBalancerIPs: 172.18.0.200
+      type: LoadBalancer
     deployment:
       enabled: true
