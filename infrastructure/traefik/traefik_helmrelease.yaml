@@ -25,7 +25,6 @@ spec:
       isDefaultClass: true
     ports:
       web:
-        port: 8080
         expose:
           default: true
         http:
@@ -35,7 +34,6 @@ spec:
               scheme: https
               permanent: true
       websecure:
-        port: 8443
         expose:
           default: true
     providers:
@@ -45,10 +43,10 @@ spec:
       kubernetesIngress:
         enabled: true
         ingressClass: traefik
+      kubernetesGateway:
+        enabled: true
     additionalArguments:
       - "--serverstransport.insecureskipverify"
-      - "--experimental.kubernetesgateway"
-      - "--providers.kubernetesgateway"
     service:
       annotations:
         metallb.universe.tf/loadBalancerIPs: 172.18.0.200
