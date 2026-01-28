@@ -9,7 +9,7 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: loft
-      version: "0.32.0"
+      version: "0.30.4"
   interval: 5m
   values:
     service:
