@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: traefik-gateway-tls
+  namespace: traefik
+spec:
+  secretName: websecure-tls
+  issuerRef:
+    name: selfsigned
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.traefik.local"
+    - "traefik.local"
+    - "tenant-a.traefik.local"
+    - "tenant-b.traefik.local"
