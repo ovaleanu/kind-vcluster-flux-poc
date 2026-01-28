@@ -11,5 +11,6 @@ spec:
   rules:
     - backendRefs:
         - kind: Service
-          name: nginx
+          name: nginx-x-default-x-vcluster-b
+          namespace: vcluster-b
           port: 80
