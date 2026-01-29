@@ -20,7 +20,6 @@
 #   1. git add -A && git commit -m "Add tenant-<name> with vcluster-<name>"
 #   2. git push
 #   3. Wait for Flux reconciliation (or run: flux reconcile ks flux-system --with-source)
-#   4. Fix vcluster kubeconfig: ./hack/fix-vcluster-kubeconfig.sh <name>
 #
 
 set -euo pipefail
@@ -614,10 +613,7 @@ echo ""
 echo "  2. Reconcile Flux (or wait for auto-reconciliation):"
 echo "     flux reconcile ks flux-system --with-source"
 echo ""
-echo "  3. Wait for vcluster to be ready, then fix kubeconfig:"
-echo "     ./hack/fix-vcluster-kubeconfig.sh ${NAME}"
-echo ""
-echo "  4. Verify:"
+echo "  3. Verify:"
 echo "     kubectl get pods -n ${VCLUSTER}"
 echo "     kubectl get svc -n ${VCLUSTER} nginx-x-default-x-${VCLUSTER}"
 echo "     kubectl get httproute -n ${TENANT}"

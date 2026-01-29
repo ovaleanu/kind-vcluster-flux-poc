@@ -91,9 +91,6 @@ git add -A && git commit -m "Add tenant-d with vcluster-d" && git push
 # Reconcile Flux (or wait for auto-reconciliation)
 flux reconcile ks flux-system --with-source
 
-# Wait for vcluster to be ready, then fix the kubeconfig
-make fix-kubeconfig TENANT_NAME=d
-
 # Verify
 curl -Lk --resolve tenant-d.traefik.local:80:172.18.0.200 \
   --resolve tenant-d.traefik.local:443:172.18.0.200 \
@@ -132,12 +129,6 @@ clusters/host-cluster/                        # Flux orchestration (new files)
 It also modifies:
 - `clusters/host-cluster/kustomization.yaml` - registers the new Flux Kustomizations
 - `infrastructure/traefik/config/referencegrant.yaml` - allows cross-namespace routing
-
-#### Why Fix the Kubeconfig?
-
-VCluster generates a kubeconfig secret (`vc-vcluster-<name>`) pointing to `localhost:8443`. Flux needs to reach the vcluster API server via its MetalLB LoadBalancer IP. The `fix-vcluster-kubeconfig.sh` script rewrites the kubeconfig to use `https://<vcluster-ip>:443`.
-
-This is a one-time fix per vcluster. After fixing, Flux can deploy workloads to the vcluster.
 
 #### Test vCluster Connectivity
 

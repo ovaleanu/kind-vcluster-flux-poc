@@ -39,15 +39,6 @@ add-tenant: ## Add a new tenant. Usage: make add-tenant TENANT_NAME=d TENANT_IP=
 	fi
 	./hack/add-tenant.sh $(TENANT_NAME) $(TENANT_IP)
 
-.PHONY: fix-kubeconfig
-fix-kubeconfig: ## Fix vcluster kubeconfig. Usage: make fix-kubeconfig TENANT_NAME=d
-	@if [ -z "$(TENANT_NAME)" ]; then \
-
-		echo "Usage: make fix-kubeconfig TENANT_NAME=<name>"; \
-		exit 1; \
-	fi
-	./hack/fix-vcluster-kubeconfig.sh $(TENANT_NAME)
-
 .PHONY: remove-tenant
 remove-tenant: ## Remove a tenant. Usage: make remove-tenant TENANT_NAME=d
 	@if [ -z "$(TENANT_NAME)" ]; then \
@@ -85,17 +76,8 @@ vcluster-delete: vcluster cluster-ctx ## Delete vclusters.
 	-$(VCLUSTER) delete $(VCLUSTER_B) -n $(VCLUSTER_B)
 	-$(VCLUSTER) delete $(VCLUSTER_C) -n $(VCLUSTER_C)
 
-.PHONY: fix-kubeconfigs
-fix-kubeconfigs: cluster-ctx ## Wait for vclusters and fix kubeconfigs for Flux access.
-	@echo "Waiting for vclusters to be deployed by Flux..."
-	@for vc in a b c; do \
-		echo "Waiting for vcluster-$$vc namespace..."; \
-		while ! kubectl get ns vcluster-$$vc &>/dev/null; do sleep 10; done; \
-		./hack/fix-vcluster-kubeconfig.sh $$vc; \
-	done
-
 .PHONY: install
-install: network cluster cilium-install deploy fix-kubeconfigs ## Install cluster and PoC.
+install: network cluster cilium-install deploy ## Install cluster and PoC.
 
 .PHONY: uninstall
 uninstall: cluster-delete ## Tear down cluster.
@@ -167,7 +149,7 @@ HUBBLE ?= $(LOCALBIN)/hubble
 ## Tool Versions
 KIND_VERSION ?= v0.31.0
 FLUX_VERSION ?= 2.7.5
-VCLUSTER_VERSION ?= v0.30.4
+VCLUSTER_VERSION ?= v0.31.0
 CILIUM_VERSION ?= 1.18.6
 CILIUM_CLI_VERSION ?= v0.18.9
 HUBBLE_VERSION ?= v1.18.5
