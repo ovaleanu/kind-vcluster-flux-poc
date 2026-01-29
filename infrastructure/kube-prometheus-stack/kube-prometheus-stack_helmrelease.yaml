@@ -14,6 +14,10 @@ spec:
   values:
     grafana:
       enabled: true
+      service:
+        type: LoadBalancer
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: 172.18.0.212
       dashboardProviders:
         dashboardproviders.yaml:
           apiVersion: 1
@@ -40,3 +44,8 @@ spec:
             gnetId: 11001
             revision: 1
             datasource: Prometheus
+    prometheus:
+      service:
+        type: LoadBalancer
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: 172.18.0.213
