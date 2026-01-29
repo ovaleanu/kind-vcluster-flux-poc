@@ -522,6 +522,8 @@ spec:
               kubernetes.io/metadata.name: kube-prometheus-stack
 ---
 # Allow external access to vcluster API (vcluster connect, kubectl)
+# Traffic from outside the cluster arrives via kube-proxy SNAT with pod CIDR source IPs.
+# The vcluster API server has its own TLS client certificate authentication.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -534,10 +536,7 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    - from:
-        - ipBlock:
-            cidr: 172.18.0.0/16
-      ports:
+    - ports:
         - protocol: TCP
           port: 8443
 ---
