@@ -85,8 +85,17 @@ vcluster-delete: vcluster cluster-ctx ## Delete vclusters.
 	-$(VCLUSTER) delete $(VCLUSTER_B) -n $(VCLUSTER_B)
 	-$(VCLUSTER) delete $(VCLUSTER_C) -n $(VCLUSTER_C)
 
+.PHONY: fix-kubeconfigs
+fix-kubeconfigs: cluster-ctx ## Wait for vclusters and fix kubeconfigs for Flux access.
+	@echo "Waiting for vclusters to be deployed by Flux..."
+	@for vc in a b c; do \
+		echo "Waiting for vcluster-$$vc namespace..."; \
+		while ! kubectl get ns vcluster-$$vc &>/dev/null; do sleep 10; done; \
+		./hack/fix-vcluster-kubeconfig.sh $$vc; \
+	done
+
 .PHONY: install
-install: network cluster cilium-install deploy ## Install cluster and PoC.
+install: network cluster cilium-install deploy fix-kubeconfigs ## Install cluster and PoC.
 
 .PHONY: uninstall
 uninstall: cluster-delete ## Tear down cluster.
