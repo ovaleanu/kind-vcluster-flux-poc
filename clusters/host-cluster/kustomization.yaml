@@ -5,5 +5,7 @@ resources:
   - infrastructure_kustomization.yaml
   - tenant-a_kustomization.yaml
   - tenant-b_kustomization.yaml
+  - tenant-c_kustomization.yaml
   - vcluster-a_kustomization.yaml
   - vcluster-b_kustomization.yaml
+  - vcluster-c_kustomization.yaml
