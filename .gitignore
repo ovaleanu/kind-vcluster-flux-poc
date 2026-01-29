@@ -3,4 +3,4 @@ kubeconfig_*
 .vscode
 .github
 .DS_Store
-/tests
+TESTING.md

@@ -23,6 +23,37 @@ network: ## Configure network.
 	@./hack/add_host.sh $(TRAEFIK_IP) traefik.local
 	@./hack/add_host.sh $(TRAEFIK_IP) tenant-a.traefik.local
 	@./hack/add_host.sh $(TRAEFIK_IP) tenant-b.traefik.local
+	@./hack/add_host.sh $(TRAEFIK_IP) tenant-c.traefik.local
+
+##@ Tenant Management
+
+TENANT_NAME ?=
+TENANT_IP ?=
+
+.PHONY: add-tenant
+add-tenant: ## Add a new tenant. Usage: make add-tenant TENANT_NAME=d TENANT_IP=172.18.0.215
+	@if [ -z "$(TENANT_NAME)" ] || [ -z "$(TENANT_IP)" ]; then \
+		echo "Usage: make add-tenant TENANT_NAME=<name> TENANT_IP=<ip>"; \
+		echo "Example: make add-tenant TENANT_NAME=d TENANT_IP=172.18.0.215"; \
+		exit 1; \
+	fi
+	./hack/add-tenant.sh $(TENANT_NAME) $(TENANT_IP)
+
+.PHONY: fix-kubeconfig
+fix-kubeconfig: ## Fix vcluster kubeconfig. Usage: make fix-kubeconfig TENANT_NAME=d
+	@if [ -z "$(TENANT_NAME)" ]; then \
+		echo "Usage: make fix-kubeconfig TENANT_NAME=<name>"; \
+		exit 1; \
+	fi
+	./hack/fix-vcluster-kubeconfig.sh $(TENANT_NAME)
+
+.PHONY: remove-tenant
+remove-tenant: ## Remove a tenant. Usage: make remove-tenant TENANT_NAME=d
+	@if [ -z "$(TENANT_NAME)" ]; then \
+		echo "Usage: make remove-tenant TENANT_NAME=<name>"; \
+		exit 1; \
+	fi
+	./hack/remove-tenant.sh $(TENANT_NAME)
 
 GITHUB_USER ?= ovaleanu
 GITHUB_REPO ?= kind-vcluster-flux-poc
