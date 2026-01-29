@@ -35,33 +35,33 @@ fi
 
 # 1. Remove vcluster directory
 if [[ -d "${REPO_ROOT}/clusters/${VCLUSTER}" ]]; then
-    echo "[1/5] Removing clusters/${VCLUSTER}/"
+    echo "[1/7] Removing clusters/${VCLUSTER}/"
     rm -rf "${REPO_ROOT}/clusters/${VCLUSTER}"
 else
-    echo "[1/5] clusters/${VCLUSTER}/ not found, skipping"
+    echo "[1/7] clusters/${VCLUSTER}/ not found, skipping"
 fi
 
 # 2. Remove tenant directory
 if [[ -d "${REPO_ROOT}/tenant/${TENANT}" ]]; then
-    echo "[2/5] Removing tenant/${TENANT}/"
+    echo "[2/7] Removing tenant/${TENANT}/"
     rm -rf "${REPO_ROOT}/tenant/${TENANT}"
 else
-    echo "[2/5] tenant/${TENANT}/ not found, skipping"
+    echo "[2/7] tenant/${TENANT}/ not found, skipping"
 fi
 
 # 3. Remove Flux orchestration files
-echo "[3/5] Removing Flux orchestration files"
+echo "[3/7] Removing Flux orchestration files"
 rm -f "${REPO_ROOT}/clusters/host-cluster/${VCLUSTER}_kustomization.yaml"
 rm -f "${REPO_ROOT}/clusters/host-cluster/${TENANT}_kustomization.yaml"
 
 # 4. Remove from root kustomization
-echo "[4/5] Updating clusters/host-cluster/kustomization.yaml"
+echo "[4/7] Updating clusters/host-cluster/kustomization.yaml"
 KUSTOMIZATION_FILE="${REPO_ROOT}/clusters/host-cluster/kustomization.yaml"
 sed -i "/- ${VCLUSTER}_kustomization.yaml/d" "${KUSTOMIZATION_FILE}"
 sed -i "/- ${TENANT}_kustomization.yaml/d" "${KUSTOMIZATION_FILE}"
 
 # 5. Remove ReferenceGrant
-echo "[5/5] Removing ReferenceGrant from infrastructure/traefik/config/referencegrant.yaml"
+echo "[5/7] Removing ReferenceGrant from infrastructure/traefik/config/referencegrant.yaml"
 REFERENCEGRANT_FILE="${REPO_ROOT}/infrastructure/traefik/config/referencegrant.yaml"
 if grep -q "allow-${TENANT}-to-${VCLUSTER}" "${REFERENCEGRANT_FILE}"; then
     # Remove the ReferenceGrant block (from --- to the next --- or end of file)
@@ -81,6 +81,22 @@ with open('${REFERENCEGRANT_FILE}', 'w') as f:
     f.write(result)
 "
 fi
+
+# 6. Remove NetworkPolicy
+echo "[6/7] Removing NetworkPolicy for ${VCLUSTER}"
+NETPOL_FILE="${REPO_ROOT}/infrastructure/network-policies/${VCLUSTER}-netpol.yaml"
+NETPOL_KUSTOMIZATION="${REPO_ROOT}/infrastructure/network-policies/kustomization.yaml"
+if [[ -f "${NETPOL_FILE}" ]]; then
+    rm -f "${NETPOL_FILE}"
+    sed -i "/${VCLUSTER}-netpol.yaml/d" "${NETPOL_KUSTOMIZATION}"
+else
+    echo "  NetworkPolicy file not found, skipping"
+fi
+
+# 7. Remove vcluster from network-policies dependency
+echo "[7/7] Removing ${VCLUSTER} from network-policies dependencies"
+INFRA_KUSTOMIZATION="${REPO_ROOT}/clusters/host-cluster/infrastructure_kustomization.yaml"
+sed -i "/- name: ${VCLUSTER}$/d" "${INFRA_KUSTOMIZATION}"
 
 echo ""
 echo "=== Done! ==="

@@ -10,7 +10,7 @@ spec:
         kind: HelmRepository
         name: prometheus
       version: "81.2.2"
-  interval: 5m
+  interval: 2m
   values:
     grafana:
       enabled: true

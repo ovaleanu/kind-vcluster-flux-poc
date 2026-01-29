@@ -13,13 +13,13 @@
 #   - Tenant workloads and routes (tenant/tenant-<name>/)
 #   - Flux orchestration (clusters/host-cluster/)
 #   - ReferenceGrant for cross-namespace routing
+#   - NetworkPolicy for vcluster namespace isolation
 #   - /etc/hosts entry for tenant-<name>.traefik.local
 #
 # After running this script:
 #   1. git add -A && git commit -m "Add tenant-<name> with vcluster-<name>"
 #   2. git push
 #   3. Wait for Flux reconciliation (or run: flux reconcile ks flux-system --with-source)
-#   4. Fix vcluster kubeconfig: ./hack/fix-vcluster-kubeconfig.sh <name>
 #
 
 set -euo pipefail
@@ -75,7 +75,7 @@ fi
 # ============================================================
 # 1. VCluster definition: clusters/vcluster-<name>/
 # ============================================================
-echo "[1/6] Creating vcluster definition: clusters/${VCLUSTER}/"
+echo "[1/7] Creating vcluster definition: clusters/${VCLUSTER}/"
 
 mkdir -p "${REPO_ROOT}/clusters/${VCLUSTER}"
 
@@ -102,7 +102,7 @@ kind: HelmRepository
 metadata:
   name: loft
 spec:
-  interval: 5m
+  interval: 2m
   url: https://charts.loft.sh
 EOF
 
@@ -119,7 +119,7 @@ spec:
         kind: HelmRepository
         name: loft
       version: "0.30.4"
-  interval: 5m
+  interval: 2m
   values:
     controlPlane:
       service:
@@ -141,6 +141,8 @@ spec:
       proxy:
         extraSANs:
           - ${VCLUSTER_IP}
+    exportKubeConfig:
+      server: "https://${VCLUSTER}.${VCLUSTER}:443"
     external:
       platform:
         apiServerHost: ${VCLUSTER_IP}
@@ -164,7 +166,7 @@ EOF
 # ============================================================
 # 2. Tenant workloads: tenant/tenant-<name>/
 # ============================================================
-echo "[2/6] Creating tenant workloads: tenant/${TENANT}/"
+echo "[2/7] Creating tenant workloads: tenant/${TENANT}/"
 
 mkdir -p "${REPO_ROOT}/tenant/${TENANT}/workload"
 mkdir -p "${REPO_ROOT}/tenant/${TENANT}/routes"
@@ -197,7 +199,7 @@ spec:
       name: vc-${VCLUSTER}
       key: config
   targetNamespace: default
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -220,7 +222,7 @@ spec:
     - name: gateway-api
       namespace: flux-system
   targetNamespace: ${TENANT}
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -313,7 +315,7 @@ EOF
 # ============================================================
 # 3. Flux orchestration: clusters/host-cluster/
 # ============================================================
-echo "[3/6] Creating Flux orchestration in clusters/host-cluster/"
+echo "[3/7] Creating Flux orchestration in clusters/host-cluster/"
 
 cat > "${REPO_ROOT}/clusters/host-cluster/${VCLUSTER}_kustomization.yaml" << EOF
 apiVersion: kustomize.toolkit.fluxcd.io/v1
@@ -327,7 +329,7 @@ spec:
     - name: metallb-config
     - name: gateway-api
     - name: traefik
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -345,7 +347,7 @@ metadata:
 spec:
   dependsOn:
     - name: ${VCLUSTER}
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -356,7 +358,7 @@ EOF
 # ============================================================
 # 4. Register in root kustomization
 # ============================================================
-echo "[4/6] Updating clusters/host-cluster/kustomization.yaml"
+echo "[4/7] Updating clusters/host-cluster/kustomization.yaml"
 
 KUSTOMIZATION_FILE="${REPO_ROOT}/clusters/host-cluster/kustomization.yaml"
 
@@ -373,7 +375,7 @@ fi
 # ============================================================
 # 5. Add ReferenceGrant
 # ============================================================
-echo "[5/6] Adding ReferenceGrant for ${TENANT} -> ${VCLUSTER}"
+echo "[5/7] Adding ReferenceGrant for ${TENANT} -> ${VCLUSTER}"
 
 REFERENCEGRANT_FILE="${REPO_ROOT}/infrastructure/traefik/config/referencegrant.yaml"
 
@@ -400,9 +402,173 @@ fi
 # ============================================================
 # 6. Add /etc/hosts entry
 # ============================================================
-echo "[6/6] Adding /etc/hosts entry for ${HOSTNAME}"
+echo "[6/7] Adding /etc/hosts entry for ${HOSTNAME}"
 
 "${SCRIPT_DIR}/add_host.sh" "${TRAEFIK_IP}" "${HOSTNAME}"
+
+# ============================================================
+# 7. Add NetworkPolicy for vcluster namespace isolation
+# ============================================================
+echo "[7/7] Adding NetworkPolicy for ${VCLUSTER} namespace isolation"
+
+NETPOL_DIR="${REPO_ROOT}/infrastructure/network-policies"
+NETPOL_FILE="${NETPOL_DIR}/${VCLUSTER}-netpol.yaml"
+NETPOL_KUSTOMIZATION="${NETPOL_DIR}/kustomization.yaml"
+INFRA_KUSTOMIZATION="${REPO_ROOT}/clusters/host-cluster/infrastructure_kustomization.yaml"
+
+if [[ ! -f "${NETPOL_FILE}" ]]; then
+    cat > "${NETPOL_FILE}" << EOF
+# Default deny all ingress traffic to ${VCLUSTER} namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-ingress
+  namespace: ${VCLUSTER}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Allow pods within ${VCLUSTER} to communicate with each other
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: ${VCLUSTER}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+---
+# Allow Traefik to reach synced nginx services (HTTP routing)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-traefik-ingress
+  namespace: ${VCLUSTER}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+      ports:
+        - protocol: TCP
+          port: 80
+---
+# Allow Flux to reach the vcluster API server (workload deployment)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-flux-to-vcluster-api
+  namespace: ${VCLUSTER}
+spec:
+  podSelector:
+    matchLabels:
+      app: vcluster
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: flux-system
+      ports:
+        - protocol: TCP
+          port: 8443
+---
+# Allow DNS resolution from kube-system
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: ${VCLUSTER}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Allow Prometheus to scrape metrics
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scraping
+  namespace: ${VCLUSTER}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-prometheus-stack
+---
+# Allow external access to vcluster API (vcluster connect, kubectl)
+# Traffic from outside the cluster arrives via kube-proxy SNAT with pod CIDR source IPs.
+# The vcluster API server has its own TLS client certificate authentication.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-external-vcluster-api
+  namespace: ${VCLUSTER}
+spec:
+  podSelector:
+    matchLabels:
+      app: vcluster
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8443
+---
+# Allow MetalLB speaker communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-metallb
+  namespace: ${VCLUSTER}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: metallb-system
+EOF
+
+    # Add to network-policies kustomization
+    if ! grep -q "${VCLUSTER}-netpol.yaml" "${NETPOL_KUSTOMIZATION}"; then
+        sed -i "/^resources:/a\\  - ${VCLUSTER}-netpol.yaml" "${NETPOL_KUSTOMIZATION}"
+    fi
+
+    # Add vcluster as dependency for network-policies Flux Kustomization
+    if ! grep -q "name: ${VCLUSTER}$" "${INFRA_KUSTOMIZATION}"; then
+        sed -i "/name: network-policies/,/timeout:/{/  interval: 2m/i\\    - name: ${VCLUSTER}
+}" "${INFRA_KUSTOMIZATION}"
+    fi
+else
+    echo "  NetworkPolicy already exists: ${NETPOL_FILE}"
+fi
 
 # ============================================================
 # Summary
@@ -435,6 +601,10 @@ echo ""
 echo "  infrastructure/traefik/config/"
 echo "    - referencegrant.yaml (modified)"
 echo ""
+echo "  infrastructure/network-policies/"
+echo "    - ${VCLUSTER}-netpol.yaml"
+echo "    - kustomization.yaml (modified)"
+echo ""
 echo "=== Next steps: ==="
 echo ""
 echo "  1. Commit and push:"
@@ -443,10 +613,7 @@ echo ""
 echo "  2. Reconcile Flux (or wait for auto-reconciliation):"
 echo "     flux reconcile ks flux-system --with-source"
 echo ""
-echo "  3. Wait for vcluster to be ready, then fix kubeconfig:"
-echo "     ./hack/fix-vcluster-kubeconfig.sh ${NAME}"
-echo ""
-echo "  4. Verify:"
+echo "  3. Verify:"
 echo "     kubectl get pods -n ${VCLUSTER}"
 echo "     kubectl get svc -n ${VCLUSTER} nginx-x-default-x-${VCLUSTER}"
 echo "     kubectl get httproute -n ${TENANT}"

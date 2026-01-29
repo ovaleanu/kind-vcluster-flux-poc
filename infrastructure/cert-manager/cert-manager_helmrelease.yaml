@@ -10,7 +10,7 @@ spec:
         kind: HelmRepository
         name: jetstack
       version: "1.19.2"
-  interval: 5m
+  interval: 2m
   values:
     installCRDs: true
     prometheus:

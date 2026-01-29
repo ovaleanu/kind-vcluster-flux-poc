@@ -10,7 +10,7 @@ spec:
         kind: HelmRepository
         name: loft
       version: "0.30.4"
-  interval: 5m
+  interval: 2m
   values:
     controlPlane:
       service:
@@ -32,6 +32,8 @@ spec:
       proxy:
         extraSANs:
           - 172.18.0.210
+    exportKubeConfig:
+      server: "https://vcluster-a.vcluster-a:443"
     external:
       platform:
         apiServerHost: 172.18.0.210

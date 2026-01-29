@@ -10,7 +10,7 @@ spec:
     - name: gateway-api
       namespace: flux-system
   targetNamespace: tenant-b
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system

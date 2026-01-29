@@ -3,5 +3,5 @@ kind: HelmRepository
 metadata:
   name: metallb
 spec:
-  interval: 5m
+  interval: 2m
   url: https://metallb.github.io/metallb
