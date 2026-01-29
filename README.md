@@ -124,11 +124,17 @@ tenant/tenant-<name>/                         # Tenant workloads + routes
 clusters/host-cluster/                        # Flux orchestration (new files)
   vcluster-<name>_kustomization.yaml          # Flux Kustomization for vcluster
   tenant-<name>_kustomization.yaml            # Flux Kustomization for tenant
+
+infrastructure/network-policies/              # Network isolation
+  vcluster-<name>-netpol.yaml                 # NetworkPolicies for the vcluster namespace
 ```
 
 It also modifies:
 - `clusters/host-cluster/kustomization.yaml` - registers the new Flux Kustomizations
+- `clusters/host-cluster/infrastructure_kustomization.yaml` - adds vcluster as dependency for network-policies
 - `infrastructure/traefik/config/referencegrant.yaml` - allows cross-namespace routing
+- `infrastructure/network-policies/kustomization.yaml` - registers the new NetworkPolicy file
+- `/etc/hosts` - adds `tenant-<name>.traefik.local` entry pointing to Traefik IP
 
 #### Test vCluster Connectivity
 
@@ -242,6 +248,157 @@ The default username is `admin`. To retrieve the password:
 kubectl get secret -n kube-prometheus-stack kube-prometheus-stack-grafana \
   -o jsonpath='{.data.admin-password}' | base64 -d && echo
 ```
+
+---
+
+## Network Isolation Testing
+
+The cluster uses Cilium CNI with NetworkPolicies to enforce tenant isolation. Each vcluster namespace has a default-deny ingress policy with explicit allow rules for required traffic.
+
+### Verify NetworkPolicies Are Applied
+
+```bash
+# List NetworkPolicies per vcluster namespace
+kubectl get networkpolicies -n vcluster-a
+kubectl get networkpolicies -n vcluster-b
+kubectl get networkpolicies -n vcluster-c
+kubectl get networkpolicies -n vcluster-d
+
+# Expected policies per namespace:
+#   deny-all-ingress          - Default deny all inbound traffic
+#   allow-same-namespace      - Pods within the namespace can communicate
+#   allow-traefik-ingress     - Traefik can reach nginx on port 80
+#   allow-flux-to-vcluster-api - Flux can deploy workloads on port 8443
+#   allow-dns                 - DNS resolution from kube-system
+#   allow-prometheus-scraping - Prometheus metrics scraping
+#   allow-external-vcluster-api - External vcluster connect on port 8443
+#   allow-metallb             - MetalLB speaker communication
+```
+
+### Test Cross-VCluster Isolation (Should Be Blocked)
+
+These tests verify that pods in one vcluster namespace cannot reach pods in another. Each test runs a temporary busybox pod and attempts to connect to a nginx pod in a different namespace.
+
+```bash
+# Get nginx pod IPs
+kubectl get pods -l app=nginx -A -o wide
+
+# Test: vcluster-a -> vcluster-b (should timeout)
+kubectl run test-isolation --rm -i --restart=Never --image=busybox -n vcluster-a \
+  -- wget -qO- --timeout=3 http://nginx-x-default-x-vcluster-b.vcluster-b.svc:80
+# Expected: "wget: download timed out" (blocked by NetworkPolicy)
+
+# Test: vcluster-a -> vcluster-c (should timeout)
+kubectl run test-isolation --rm -i --restart=Never --image=busybox -n vcluster-a \
+  -- wget -qO- --timeout=3 http://nginx-x-default-x-vcluster-c.vcluster-c.svc:80
+# Expected: "wget: download timed out"
+
+# Test: vcluster-b -> vcluster-a (should timeout)
+kubectl run test-isolation --rm -i --restart=Never --image=busybox -n vcluster-b \
+  -- wget -qO- --timeout=3 http://nginx-x-default-x-vcluster-a.vcluster-a.svc:80
+# Expected: "wget: download timed out"
+
+# Test: vcluster-d -> vcluster-a (should timeout)
+kubectl run test-isolation --rm -i --restart=Never --image=busybox -n vcluster-d \
+  -- wget -qO- --timeout=3 http://nginx-x-default-x-vcluster-a.vcluster-a.svc:80
+# Expected: "wget: download timed out"
+```
+
+You can also test using pod IPs directly (useful if DNS is not resolving cross-namespace):
+
+```bash
+# Get the target pod IP
+NGINX_B_IP=$(kubectl get pod -n vcluster-b -l app=nginx -o jsonpath='{.items[0].status.podIP}')
+
+# Test: vcluster-a -> vcluster-b by pod IP (should timeout)
+kubectl run test-isolation --rm -i --restart=Never --image=busybox -n vcluster-a \
+  -- wget -qO- --timeout=3 http://${NGINX_B_IP}:80
+# Expected: "wget: download timed out"
+```
+
+### Test Same-Namespace Communication (Should Work)
+
+```bash
+# Test: pod in vcluster-a can reach nginx in vcluster-a (same namespace)
+kubectl run test-same-ns --rm -i --restart=Never --image=busybox -n vcluster-a \
+  -- wget -qO- --timeout=3 http://nginx-x-default-x-vcluster-a.vcluster-a.svc:80
+# Expected: nginx welcome page HTML
+```
+
+### Test Traefik Ingress (Should Work)
+
+```bash
+TRAEFIK_IP=172.18.0.200
+
+# Traefik -> tenant-a
+curl -Lk --resolve tenant-a.traefik.local:80:${TRAEFIK_IP} \
+  --resolve tenant-a.traefik.local:443:${TRAEFIK_IP} \
+  http://tenant-a.traefik.local
+# Expected: nginx welcome page
+
+# Traefik -> tenant-b
+curl -Lk --resolve tenant-b.traefik.local:80:${TRAEFIK_IP} \
+  --resolve tenant-b.traefik.local:443:${TRAEFIK_IP} \
+  http://tenant-b.traefik.local
+
+# Traefik -> tenant-c
+curl -Lk --resolve tenant-c.traefik.local:80:${TRAEFIK_IP} \
+  --resolve tenant-c.traefik.local:443:${TRAEFIK_IP} \
+  http://tenant-c.traefik.local
+
+# Traefik -> tenant-d
+curl -Lk --resolve tenant-d.traefik.local:80:${TRAEFIK_IP} \
+  --resolve tenant-d.traefik.local:443:${TRAEFIK_IP} \
+  http://tenant-d.traefik.local
+```
+
+### Test External VCluster API Access (Should Work)
+
+```bash
+# vcluster connect uses the LoadBalancer IP to reach the vcluster API
+./bin/vcluster connect vcluster-a -n vcluster-a
+kubectl get pods -A
+./bin/vcluster disconnect
+
+# Or test the API directly via curl
+curl -sk https://172.18.0.210:443/healthz   # vcluster-a
+curl -sk https://172.18.0.211:443/healthz   # vcluster-b
+curl -sk https://172.18.0.214:443/healthz   # vcluster-c
+curl -sk https://172.18.0.215:443/healthz   # vcluster-d
+# Expected: "ok"
+```
+
+### Debug with Cilium Monitor
+
+If a connection is unexpectedly blocked or allowed, use Cilium's monitor to inspect packet drops:
+
+```bash
+# Watch for dropped packets in real-time
+kubectl exec -n kube-system ds/cilium -- cilium-dbg monitor --type drop
+
+# Filter drops for a specific namespace
+kubectl exec -n kube-system ds/cilium -- cilium-dbg monitor --type drop | grep vcluster-a
+
+# Check Cilium identity for a pod
+kubectl exec -n kube-system ds/cilium -- cilium-dbg identity get <identity-id>
+```
+
+### Network Isolation Summary
+
+| From | To | Port | Expected | Why |
+|------|-----|------|----------|-----|
+| vcluster-a pod | vcluster-b pod | 80 | BLOCKED | Cross-namespace isolation |
+| vcluster-a pod | vcluster-a pod | any | ALLOWED | Same-namespace policy |
+| Traefik (ns: traefik) | nginx in vcluster-X | 80 | ALLOWED | allow-traefik-ingress |
+| Flux (ns: flux-system) | vcluster-X-0 | 8443 | ALLOWED | allow-flux-to-vcluster-api |
+| External (vcluster connect) | vcluster-X-0 | 8443 | ALLOWED | allow-external-vcluster-api |
+| kube-system (CoreDNS) | vcluster-X pods | 53 | ALLOWED | allow-dns |
+| Prometheus | vcluster-X pods | metrics | ALLOWED | allow-prometheus-scraping |
+| MetalLB speaker | vcluster-X pods | any | ALLOWED | allow-metallb |
+
+---
+
+
 
 
 REF: https://github.com/loft-sh/vcluster

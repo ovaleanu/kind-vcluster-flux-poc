@@ -385,7 +385,124 @@ test_http_routes() {
     curl -s $CURL_OPTS http://tenant-c.traefik.local 2>/dev/null | head -10 || echo "Failed to fetch"
 }
 
-# Test 7: Resource Status Summary
+# Test 7: Network Isolation
+test_network_isolation() {
+    print_header "Testing Network Isolation (NetworkPolicies)"
+
+    # Discover all vcluster namespaces dynamically
+    local VCLUSTER_NAMESPACES
+    VCLUSTER_NAMESPACES=$(kubectl get ns --no-headers -o custom-columns=':metadata.name' | grep '^vcluster-' | sort)
+
+    if [ -z "$VCLUSTER_NAMESPACES" ]; then
+        print_failure "No vcluster namespaces found - skipping network isolation tests"
+        ((TOTAL_TESTS++))
+        ((FAILED_TESTS++))
+        return 0
+    fi
+
+    # Test: NetworkPolicies exist in each vcluster namespace
+    for ns in $VCLUSTER_NAMESPACES; do
+        run_test "Check NetworkPolicies exist in $ns" \
+            "kubectl get networkpolicy -n $ns deny-all-ingress &>/dev/null" \
+            "deny-all-ingress policy exists"
+
+        run_test "Check allow-same-namespace policy in $ns" \
+            "kubectl get networkpolicy -n $ns allow-same-namespace &>/dev/null" \
+            "allow-same-namespace policy exists"
+
+        run_test "Check allow-traefik-ingress policy in $ns" \
+            "kubectl get networkpolicy -n $ns allow-traefik-ingress &>/dev/null" \
+            "allow-traefik-ingress policy exists"
+
+        run_test "Check allow-flux-to-vcluster-api policy in $ns" \
+            "kubectl get networkpolicy -n $ns allow-flux-to-vcluster-api &>/dev/null" \
+            "allow-flux-to-vcluster-api policy exists"
+
+        run_test "Check allow-external-vcluster-api policy in $ns" \
+            "kubectl get networkpolicy -n $ns allow-external-vcluster-api &>/dev/null" \
+            "allow-external-vcluster-api policy exists"
+    done
+
+    # Test: Cross-vcluster isolation (should be blocked)
+    # Pick first two vcluster namespaces for cross-namespace tests
+    local NS_ARRAY=($VCLUSTER_NAMESPACES)
+    if [ ${#NS_ARRAY[@]} -lt 2 ]; then
+        print_info "Only one vcluster namespace found - skipping cross-vcluster isolation tests"
+        return 0
+    fi
+
+    local SRC_NS="${NS_ARRAY[0]}"
+    local DST_NS="${NS_ARRAY[1]}"
+
+    # Get the target nginx pod IP in the destination namespace
+    local DST_NGINX_IP
+    DST_NGINX_IP=$(kubectl get pod -n "$DST_NS" -l app=nginx -o jsonpath='{.items[0].status.podIP}' 2>/dev/null)
+
+    if [ -z "$DST_NGINX_IP" ]; then
+        print_info "No nginx pod found in $DST_NS - skipping cross-vcluster isolation test"
+    else
+        print_test "Cross-vcluster isolation: $SRC_NS -> $DST_NS nginx ($DST_NGINX_IP) should be BLOCKED"
+        # Run a busybox pod that tries to wget the target - should timeout
+        if kubectl run test-isolation --rm -i --restart=Never --image=busybox -n "$SRC_NS" \
+            --timeout=15s -- wget -qO- --timeout=3 "http://${DST_NGINX_IP}:80" &>/dev/null 2>&1; then
+            # If wget succeeds, isolation is broken
+            print_failure "Cross-vcluster isolation: $SRC_NS -> $DST_NS - traffic was NOT blocked"
+        else
+            print_success "Cross-vcluster isolation: $SRC_NS -> $DST_NS - traffic blocked"
+        fi
+    fi
+
+    # Test reverse direction
+    local REV_NGINX_IP
+    REV_NGINX_IP=$(kubectl get pod -n "$SRC_NS" -l app=nginx -o jsonpath='{.items[0].status.podIP}' 2>/dev/null)
+
+    if [ -z "$REV_NGINX_IP" ]; then
+        print_info "No nginx pod found in $SRC_NS - skipping reverse isolation test"
+    else
+        print_test "Cross-vcluster isolation: $DST_NS -> $SRC_NS nginx ($REV_NGINX_IP) should be BLOCKED"
+        if kubectl run test-isolation --rm -i --restart=Never --image=busybox -n "$DST_NS" \
+            --timeout=15s -- wget -qO- --timeout=3 "http://${REV_NGINX_IP}:80" &>/dev/null 2>&1; then
+            print_failure "Cross-vcluster isolation: $DST_NS -> $SRC_NS - traffic was NOT blocked"
+        else
+            print_success "Cross-vcluster isolation: $DST_NS -> $SRC_NS - traffic blocked"
+        fi
+    fi
+
+    # Test: Same-namespace communication (should work)
+    local SAME_NS_NGINX_IP
+    SAME_NS_NGINX_IP=$(kubectl get pod -n "$SRC_NS" -l app=nginx -o jsonpath='{.items[0].status.podIP}' 2>/dev/null)
+
+    if [ -z "$SAME_NS_NGINX_IP" ]; then
+        print_info "No nginx pod found in $SRC_NS - skipping same-namespace test"
+    else
+        print_test "Same-namespace communication: $SRC_NS pod -> $SRC_NS nginx should be ALLOWED"
+        if kubectl run test-same-ns --rm -i --restart=Never --image=busybox -n "$SRC_NS" \
+            --timeout=15s -- wget -qO- --timeout=5 "http://${SAME_NS_NGINX_IP}:80" &>/dev/null 2>&1; then
+            print_success "Same-namespace communication: $SRC_NS - traffic allowed"
+        else
+            print_failure "Same-namespace communication: $SRC_NS - traffic was blocked (should be allowed)"
+        fi
+    fi
+
+    # Test: External vcluster API access (should work)
+    for ns in $VCLUSTER_NAMESPACES; do
+        local VC_IP
+        VC_IP=$(kubectl get svc -n "$ns" "$ns" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+        if [ -n "$VC_IP" ]; then
+            run_test "External vcluster API access: $ns ($VC_IP:443)" \
+                "curl -sk --max-time 5 https://${VC_IP}:443/healthz 2>/dev/null | grep -q 'ok'" \
+                "vcluster API is accessible"
+        fi
+    done
+
+    print_info "\nNetworkPolicies per namespace:"
+    for ns in $VCLUSTER_NAMESPACES; do
+        echo "--- $ns ---"
+        kubectl get networkpolicies -n "$ns" --no-headers 2>/dev/null
+    done
+}
+
+# Test 8: Resource Status Summary
 test_resource_summary() {
     print_header "Resource Status Summary"
 
@@ -422,6 +539,7 @@ main() {
     test_vclusters
     test_tenant_workloads
     test_http_routes
+    test_network_isolation
     test_resource_summary
 
     # Print summary
