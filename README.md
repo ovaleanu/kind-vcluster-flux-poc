@@ -157,6 +157,29 @@ VCluster generates a kubeconfig secret (`vc-vcluster-<name>`) pointing to `local
 
 This is a one-time fix per vcluster. After fixing, Flux can deploy workloads to the vcluster.
 
+#### Test VCluster Connectivity
+
+Connect to vcluster-d:
+
+```bash
+# Connect to vcluster-d
+./bin/vcluster connect vcluster-d -n vcluster-d
+
+# Check namespaces inside vcluster
+kubectl get namespaces
+
+# Check pods inside vcluster
+kubectl get pods -A
+
+# Expected: nginx pod in default namespace
+
+# Check services
+kubectl get svc
+
+# Disconnect
+./bin/vcluster disconnect
+```
+
 #### Removing a Tenant
 
 ```bash
