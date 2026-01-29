@@ -10,7 +10,7 @@ spec:
         kind: HelmRepository
         name: traefik
       version: "39.0.0"
-  interval: 5m
+  interval: 2m
   values:
     logs:
       general:

@@ -103,7 +103,7 @@ kind: HelmRepository
 metadata:
   name: loft
 spec:
-  interval: 5m
+  interval: 2m
   url: https://charts.loft.sh
 EOF
 
@@ -120,7 +120,7 @@ spec:
         kind: HelmRepository
         name: loft
       version: "0.30.4"
-  interval: 5m
+  interval: 2m
   values:
     controlPlane:
       service:
@@ -198,7 +198,7 @@ spec:
       name: vc-${VCLUSTER}
       key: config
   targetNamespace: default
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -221,7 +221,7 @@ spec:
     - name: gateway-api
       namespace: flux-system
   targetNamespace: ${TENANT}
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -328,7 +328,7 @@ spec:
     - name: metallb-config
     - name: gateway-api
     - name: traefik
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -346,7 +346,7 @@ metadata:
 spec:
   dependsOn:
     - name: ${VCLUSTER}
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -543,7 +543,7 @@ EOF
 
     # Add vcluster as dependency for network-policies Flux Kustomization
     if ! grep -q "name: ${VCLUSTER}$" "${INFRA_KUSTOMIZATION}"; then
-        sed -i "/name: network-policies/,/timeout:/{/  interval: 5m/i\\    - name: ${VCLUSTER}
+        sed -i "/name: network-policies/,/timeout:/{/  interval: 2m/i\\    - name: ${VCLUSTER}
 }" "${INFRA_KUSTOMIZATION}"
     fi
 else

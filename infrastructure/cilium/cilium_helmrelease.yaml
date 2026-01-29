@@ -10,7 +10,7 @@ spec:
         kind: HelmRepository
         name: cilium
       version: "1.18.6"
-  interval: 5m
+  interval: 2m
   values:
     ipam:
       mode: kubernetes

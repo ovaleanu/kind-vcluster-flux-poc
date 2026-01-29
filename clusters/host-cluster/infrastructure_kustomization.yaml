@@ -4,7 +4,7 @@ metadata:
   name: cilium
   namespace: flux-system
 spec:
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -20,7 +20,7 @@ metadata:
 spec:
   dependsOn:
     - name: cilium
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -36,7 +36,7 @@ metadata:
 spec:
   dependsOn:
     - name: cilium
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -52,7 +52,7 @@ metadata:
 spec:
   dependsOn:
     - name: metallb
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -68,7 +68,7 @@ metadata:
 spec:
   dependsOn:
    - name: kube-prometheus-stack
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -84,7 +84,7 @@ metadata:
 spec:
   dependsOn:
     - name: cert-manager
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -98,7 +98,7 @@ metadata:
   name: gateway-api
   namespace: flux-system
 spec:
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -118,7 +118,7 @@ spec:
     - name: cert-manager
     - name: cert-manager-config
     - name: gateway-api
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -134,7 +134,7 @@ metadata:
 spec:
   dependsOn:
     - name: traefik
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
@@ -153,7 +153,7 @@ spec:
     - name: vcluster-a
     - name: vcluster-b
     - name: vcluster-c
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system

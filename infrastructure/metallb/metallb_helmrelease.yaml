@@ -10,4 +10,4 @@ spec:
         kind: HelmRepository
         name: metallb
       version: "0.15.3"
-  interval: 5m
+  interval: 2m

@@ -9,7 +9,7 @@ spec:
       name: vc-vcluster-b
       key: config
   targetNamespace: default
-  interval: 5m
+  interval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
