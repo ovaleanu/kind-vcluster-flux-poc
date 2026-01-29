@@ -1,9 +1,25 @@
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
+  name: cilium
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/cilium
+  prune: true
+  timeout: 10m
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
   name: kube-prometheus-stack
   namespace: flux-system
 spec:
+  dependsOn:
+    - name: cilium
   interval: 5m
   sourceRef:
     kind: GitRepository
@@ -18,6 +34,8 @@ metadata:
   name: metallb
   namespace: flux-system
 spec:
+  dependsOn:
+    - name: cilium
   interval: 5m
   sourceRef:
     kind: GitRepository
@@ -121,5 +139,24 @@ spec:
     kind: GitRepository
     name: flux-system
   path: ./infrastructure/traefik/config
+  prune: true
+  timeout: 5m
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: network-policies
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: cilium
+    - name: vcluster-a
+    - name: vcluster-b
+    - name: vcluster-c
+  interval: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/network-policies
   prune: true
   timeout: 5m

@@ -68,22 +68,25 @@ deploy: flux cluster-ctx ## Deploy PoC.
 
 VCLUSTER_A ?= vcluster-a
 VCLUSTER_B ?= vcluster-b
+VCLUSTER_C ?= vcluster-c
 
 .PHONY: vctx
 vctx: vcluster cluster-ctx ## Configure vcluster contexts.
 	$(VCLUSTER) connect $(VCLUSTER_A) -n $(VCLUSTER_A)
 	$(VCLUSTER) connect $(VCLUSTER_B) -n $(VCLUSTER_B)
+	$(VCLUSTER) connect $(VCLUSTER_C) -n $(VCLUSTER_C)
 
 .PHONY: vcluster-delete
 vcluster-delete: vcluster cluster-ctx ## Delete vclusters.
-	$(VCLUSTER) delete $(VCLUSTER_A) -n $(VCLUSTER_A)
-	$(VCLUSTER) delete $(VCLUSTER_B) -n $(VCLUSTER_B)
+	-$(VCLUSTER) delete $(VCLUSTER_A) -n $(VCLUSTER_A)
+	-$(VCLUSTER) delete $(VCLUSTER_B) -n $(VCLUSTER_B)
+	-$(VCLUSTER) delete $(VCLUSTER_C) -n $(VCLUSTER_C)
 
 .PHONY: install
 install: network cluster deploy ## Install cluster and PoC.
 
 .PHONY: uninstall
-uninstall: vcluster-delete cluster-delete ## Tear down vcluster and cluster.
+uninstall: cluster-delete ## Tear down cluster.
 
 ##@ Cluster
 
