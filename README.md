@@ -368,21 +368,6 @@ curl -sk https://172.18.0.215:443/healthz   # vcluster-d
 # Expected: "ok"
 ```
 
-### Debug with Cilium Monitor
-
-If a connection is unexpectedly blocked or allowed, use Cilium's monitor to inspect packet drops:
-
-```bash
-# Watch for dropped packets in real-time
-kubectl exec -n kube-system ds/cilium -- cilium-dbg monitor --type drop
-
-# Filter drops for a specific namespace
-kubectl exec -n kube-system ds/cilium -- cilium-dbg monitor --type drop | grep vcluster-a
-
-# Check Cilium identity for a pod
-kubectl exec -n kube-system ds/cilium -- cilium-dbg identity get <identity-id>
-```
-
 ### Network Isolation Summary
 
 | From | To | Port | Expected | Why |
@@ -398,8 +383,18 @@ kubectl exec -n kube-system ds/cilium -- cilium-dbg identity get <identity-id>
 
 ---
 
+### Hubble UI (Web Dashboard)
+
+Here's how to access Hubble:
+
+Hubble UI (Web Dashboard)
+The Hubble UI is running as a ClusterIP service, so use port-forward to access it:
 
 
+kubectl port-forward -n kube-system svc/hubble-ui 12000:80
+Then open http://localhost:12000 in your browser. 
+
+---
 
 REF: https://github.com/loft-sh/vcluster
 
