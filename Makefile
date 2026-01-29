@@ -42,6 +42,7 @@ add-tenant: ## Add a new tenant. Usage: make add-tenant TENANT_NAME=d TENANT_IP=
 .PHONY: fix-kubeconfig
 fix-kubeconfig: ## Fix vcluster kubeconfig. Usage: make fix-kubeconfig TENANT_NAME=d
 	@if [ -z "$(TENANT_NAME)" ]; then \
+
 		echo "Usage: make fix-kubeconfig TENANT_NAME=<name>"; \
 		exit 1; \
 	fi
@@ -57,11 +58,13 @@ remove-tenant: ## Remove a tenant. Usage: make remove-tenant TENANT_NAME=d
 
 GITHUB_USER ?= ovaleanu
 GITHUB_REPO ?= kind-vcluster-flux-poc
+GITHUB_BRANCH ?= feat/add-cilium
 .PHONY: deploy
 deploy: flux cluster-ctx ## Deploy PoC.
 	$(FLUX) bootstrap github \
 		--owner=$(GITHUB_USER) \
 		--repository=$(GITHUB_REPO) \
+		--branch=$(GITHUB_BRANCH) \
 		--private=false \
 		--personal=true \
 		--path=clusters/host-cluster
@@ -83,7 +86,7 @@ vcluster-delete: vcluster cluster-ctx ## Delete vclusters.
 	-$(VCLUSTER) delete $(VCLUSTER_C) -n $(VCLUSTER_C)
 
 .PHONY: install
-install: network cluster deploy ## Install cluster and PoC.
+install: network cluster cilium-install deploy ## Install cluster and PoC.
 
 .PHONY: uninstall
 uninstall: cluster-delete ## Tear down cluster.
@@ -110,6 +113,24 @@ cluster-delete: kind ## Delete kind cluster.
 cluster-ctx: ## Set cluster context.
 	@kubectl config use-context kind-$(CLUSTER)
 
+.PHONY: cilium-install
+cilium-install: cilium-cli cluster-ctx ## Pre-install Cilium CNI (nodes need CNI before Flux can bootstrap).
+	@echo "Adding Cilium Helm repository..."
+	@helm repo add cilium https://helm.cilium.io/ --force-update
+	@echo "Installing Cilium $(CILIUM_VERSION)..."
+	@helm upgrade --install cilium cilium/cilium \
+		--namespace kube-system \
+		--version $(CILIUM_VERSION) \
+		--set ipam.mode=kubernetes \
+		--set kubeProxyReplacement=false \
+		--set image.pullPolicy=IfNotPresent \
+		--set hubble.enabled=true \
+		--set hubble.relay.enabled=true \
+		--set hubble.ui.enabled=true \
+		--wait --timeout 5m
+	@echo "Waiting for nodes to be ready..."
+	@kubectl wait --for=condition=Ready nodes --all --timeout=5m
+
 .PHONY: cluster-status
 cluster-status: kind ## Check if cluster exists.
 	@if $(KIND) get clusters 2>/dev/null | grep -q "^$(CLUSTER)$$"; then \
@@ -131,11 +152,16 @@ $(LOCALBIN):
 KIND ?= $(LOCALBIN)/kind
 FLUX ?= $(LOCALBIN)/flux
 VCLUSTER ?= $(LOCALBIN)/vcluster
+CILIUM_CLI ?= $(LOCALBIN)/cilium
+HUBBLE ?= $(LOCALBIN)/hubble
 
 ## Tool Versions
 KIND_VERSION ?= v0.31.0
 FLUX_VERSION ?= 2.7.5
 VCLUSTER_VERSION ?= v0.30.4
+CILIUM_VERSION ?= 1.18.6
+CILIUM_CLI_VERSION ?= v0.18.9
+HUBBLE_VERSION ?= v1.18.5
 
 .PHONY: kind
 kind: $(KIND) ## Download kind locally if necessary.
@@ -169,5 +195,35 @@ ifeq (,$(shell which vcluster 2>/dev/null))
 	}
 else
 VCLUSTER = $(shell which vcluster)
+endif
+endif
+
+.PHONY: cilium-cli
+cilium-cli: ## Download cilium CLI locally if necessary.
+ifeq (,$(wildcard $(CILIUM_CLI)))
+ifeq (,$(shell which cilium 2>/dev/null))
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(CILIUM_CLI)) ;\
+	curl -sSLo - https://github.com/cilium/cilium-cli/releases/download/$(CILIUM_CLI_VERSION)/cilium-linux-amd64.tar.gz | \
+	tar xzf - -C $(LOCALBIN) ;\
+	}
+else
+CILIUM_CLI = $(shell which cilium)
+endif
+endif
+
+.PHONY: hubble
+hubble: ## Download hubble CLI locally if necessary.
+ifeq (,$(wildcard $(HUBBLE)))
+ifeq (,$(shell which hubble 2>/dev/null))
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(HUBBLE)) ;\
+	curl -sSLo - https://github.com/cilium/hubble/releases/download/$(HUBBLE_VERSION)/hubble-linux-amd64.tar.gz | \
+	tar xzf - -C $(LOCALBIN) ;\
+	}
+else
+HUBBLE = $(shell which hubble)
 endif
 endif

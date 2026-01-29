@@ -9,7 +9,7 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: cilium
-      version: "1.17.3"
+      version: "1.18.6"
   interval: 5m
   values:
     ipam:
@@ -18,7 +18,11 @@ spec:
     image:
       pullPolicy: IfNotPresent
     hubble:
-      enabled: false
+      enabled: true
+      relay:
+        enabled: true
+      ui:
+        enabled: true
     securityContext:
       capabilities:
         ciliumAgent:
