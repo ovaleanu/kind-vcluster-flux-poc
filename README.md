@@ -1,7 +1,7 @@
 ## kind + vcluster + flux multi-tenancy PoC
 [vcluster](https://www.vcluster.com/) + [flux](https://fluxcd.io/) multi-tenancy  PoC
 
-vcluster - Create fully functional virtual Kubernetes clusters - Each vcluster runs inside a namespace of the underlying k8s cluster. It's cheaper than creating separate full-blown clusters and it offers better multi-tenancy and isolation than regular namespaces.
+vcluster - Create fully functional virtual Kubernetes clusters - Each vcluster runs inside a namespace of the underlying host k8s cluster. 
 
 ### Requirenments
 - Linux laptop/workstation
@@ -66,6 +66,21 @@ Each tenant gets its own virtual cluster (vcluster) with full isolation. An auto
 
 #### Quick Start
 
+#### IP Address Allocation
+
+The MetalLB pool is `172.18.0.200-172.18.0.220`. Current allocations:
+
+| Service | IP |
+|---------|-----|
+| Traefik | 172.18.0.200 |
+| vcluster-a | 172.18.0.210 |
+| vcluster-b | 172.18.0.211 |
+| Grafana | 172.18.0.212 |
+| Prometheus | 172.18.0.213 |
+| vcluster-c | 172.18.0.214 |
+
+Pick an unused IP from the pool for each new tenant.
+
 ```bash
 # Add a new tenant (e.g., tenant-d with vcluster IP 172.18.0.215)
 make add-tenant TENANT_NAME=d TENANT_IP=172.18.0.215
@@ -81,24 +96,9 @@ make fix-kubeconfig TENANT_NAME=d
 
 # Verify
 curl -Lk --resolve tenant-d.traefik.local:80:172.18.0.200 \
-         --resolve tenant-d.traefik.local:443:172.18.0.200 \
-         http://tenant-d.traefik.local
+  --resolve tenant-d.traefik.local:443:172.18.0.200 \
+   http://tenant-d.traefik.local
 ```
-
-#### IP Address Allocation
-
-The MetalLB pool is `172.18.0.200-172.18.0.220`. Current allocations:
-
-| Service | IP |
-|---------|-----|
-| Traefik | 172.18.0.200 |
-| vcluster-a | 172.18.0.210 |
-| vcluster-b | 172.18.0.211 |
-| Grafana | 172.18.0.212 |
-| Prometheus | 172.18.0.213 |
-| vcluster-c | 172.18.0.214 |
-
-Pick an unused IP from the pool for each new tenant.
 
 #### What the Script Creates
 
@@ -133,31 +133,13 @@ It also modifies:
 - `clusters/host-cluster/kustomization.yaml` - registers the new Flux Kustomizations
 - `infrastructure/traefik/config/referencegrant.yaml` - allows cross-namespace routing
 
-#### Step-by-Step (Manual)
-
-If you prefer to create files manually instead of using the script:
-
-1. **Create vcluster definition** - Copy `clusters/vcluster-a/` to `clusters/vcluster-<name>/` and replace all occurrences of `vcluster-a` with `vcluster-<name>` and the IP `172.18.0.210` with your chosen IP.
-
-2. **Create tenant workloads** - Copy `tenant/tenant-a/` to `tenant/tenant-<name>/` and replace all occurrences of `tenant-a` with `tenant-<name>` and `vcluster-a` with `vcluster-<name>`.
-
-3. **Create Flux orchestration** - Copy `clusters/host-cluster/vcluster-a_kustomization.yaml` and `clusters/host-cluster/tenant-a_kustomization.yaml`, renaming and updating references.
-
-4. **Register in root kustomization** - Add the two new files to `clusters/host-cluster/kustomization.yaml`.
-
-5. **Add ReferenceGrant** - Append a new ReferenceGrant block to `infrastructure/traefik/config/referencegrant.yaml`.
-
-6. **Add /etc/hosts entry** - `sudo ./hack/add_host.sh 172.18.0.200 tenant-<name>.traefik.local`
-
-7. **Commit, push, reconcile, fix kubeconfig** (same as Quick Start above).
-
 #### Why Fix the Kubeconfig?
 
 VCluster generates a kubeconfig secret (`vc-vcluster-<name>`) pointing to `localhost:8443`. Flux needs to reach the vcluster API server via its MetalLB LoadBalancer IP. The `fix-vcluster-kubeconfig.sh` script rewrites the kubeconfig to use `https://<vcluster-ip>:443`.
 
 This is a one-time fix per vcluster. After fixing, Flux can deploy workloads to the vcluster.
 
-#### Test VCluster Connectivity
+#### Test vCluster Connectivity
 
 Connect to vcluster-d:
 
@@ -187,6 +169,7 @@ make remove-tenant TENANT_NAME=d
 git add -A && git commit -m "Remove tenant-d and vcluster-d" && git push
 flux reconcile ks flux-system --with-source
 ```
+
 
 #### Architecture
 
