@@ -1,9 +1,11 @@
 #!/bin/bash
 #
-# Fix vcluster kubeconfig secret to use LoadBalancer IP instead of localhost.
+# Fix vcluster kubeconfig secret to use internal service DNS instead of localhost.
 #
 # VCluster generates kubeconfigs pointing to localhost:8443, but Flux needs
-# to reach the vcluster API server via the MetalLB LoadBalancer IP.
+# to reach the vcluster API server via the internal Kubernetes service DNS.
+# Using the internal DNS (vcluster-X.vcluster-X:443) instead of the LoadBalancer
+# IP ensures NetworkPolicies can properly identify the source namespace.
 #
 # Usage:
 #   ./hack/fix-vcluster-kubeconfig.sh <name>
@@ -23,31 +25,13 @@ fi
 NAME="$1"
 VCLUSTER="vcluster-${NAME}"
 SECRET="vc-${VCLUSTER}"
+INTERNAL_SERVER="https://${VCLUSTER}.${VCLUSTER}:443"
 
 echo "=== Fixing kubeconfig for ${VCLUSTER} ==="
 
 # Wait for the vcluster pod to be ready
 echo "Waiting for ${VCLUSTER} pod to be ready..."
 kubectl wait --for=condition=Ready pod/${VCLUSTER}-0 -n "${VCLUSTER}" --timeout=300s
-
-# Get the LoadBalancer IP
-echo "Getting LoadBalancer IP..."
-VCLUSTER_IP=""
-for i in $(seq 1 30); do
-    VCLUSTER_IP=$(kubectl get svc -n "${VCLUSTER}" "${VCLUSTER}" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
-    if [[ -n "${VCLUSTER_IP}" ]]; then
-        break
-    fi
-    echo "  Waiting for LoadBalancer IP (attempt ${i}/30)..."
-    sleep 5
-done
-
-if [[ -z "${VCLUSTER_IP}" ]]; then
-    echo "ERROR: Could not get LoadBalancer IP for ${VCLUSTER}"
-    exit 1
-fi
-
-echo "LoadBalancer IP: ${VCLUSTER_IP}"
 
 # Wait for the kubeconfig secret to exist
 echo "Waiting for kubeconfig secret ${SECRET}..."
@@ -62,14 +46,14 @@ done
 # Get current kubeconfig
 KUBECONFIG_DATA=$(kubectl get secret -n "${VCLUSTER}" "${SECRET}" -o jsonpath='{.data.config}' | base64 -d)
 
-# Check if it already points to the correct IP
-if echo "${KUBECONFIG_DATA}" | grep -q "https://${VCLUSTER_IP}:443"; then
-    echo "Kubeconfig already points to ${VCLUSTER_IP}:443. No fix needed."
+# Check if it already points to the correct internal DNS
+if echo "${KUBECONFIG_DATA}" | grep -q "${INTERNAL_SERVER}"; then
+    echo "Kubeconfig already points to ${INTERNAL_SERVER}. No fix needed."
     exit 0
 fi
 
-# Replace localhost:8443 with LoadBalancer IP
-FIXED_KUBECONFIG=$(echo "${KUBECONFIG_DATA}" | sed "s|https://localhost:8443|https://${VCLUSTER_IP}:443|g")
+# Replace localhost:8443 with internal service DNS
+FIXED_KUBECONFIG=$(echo "${KUBECONFIG_DATA}" | sed "s|https://localhost:8443|${INTERNAL_SERVER}|g")
 
 # Update the secret
 echo "Updating kubeconfig secret..."
@@ -79,7 +63,7 @@ kubectl get secret -n "${VCLUSTER}" "${SECRET}" -o json | \
 
 echo ""
 echo "=== Kubeconfig fixed for ${VCLUSTER} ==="
-echo "API server: https://${VCLUSTER_IP}:443"
+echo "API server: ${INTERNAL_SERVER}"
 echo ""
 echo "Flux will now be able to deploy workloads to ${VCLUSTER}."
 echo "Trigger reconciliation: flux reconcile ks ${VCLUSTER} --with-source"

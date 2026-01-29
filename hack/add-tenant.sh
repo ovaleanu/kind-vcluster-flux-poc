@@ -142,6 +142,8 @@ spec:
       proxy:
         extraSANs:
           - ${VCLUSTER_IP}
+    exportKubeConfig:
+      server: "https://${VCLUSTER}.${VCLUSTER}:443"
     external:
       platform:
         apiServerHost: ${VCLUSTER_IP}
@@ -480,7 +482,7 @@ spec:
               kubernetes.io/metadata.name: flux-system
       ports:
         - protocol: TCP
-          port: 443
+          port: 8443
 ---
 # Allow DNS resolution from kube-system
 apiVersion: networking.k8s.io/v1
