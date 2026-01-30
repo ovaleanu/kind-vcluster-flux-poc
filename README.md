@@ -138,8 +138,8 @@ It also modifies:
 After adding a tenant, connect to verify:
 
 ```bash
-# Connect to the new vcluster
-./bin/vcluster connect vcluster-<name> -n vcluster-<name>
+# Connect to the new vcluster (--driver helm is required for Helm-managed vclusters)
+./bin/vcluster connect vcluster-<name> -n vcluster-<name> --driver helm
 
 # Check namespaces inside vcluster
 kubectl get namespaces
@@ -340,7 +340,8 @@ curl -Lk --resolve tenant-c.traefik.local:80:${TRAEFIK_IP} \
 
 ```bash
 # vcluster connect uses the LoadBalancer IP to reach the vcluster API
-./bin/vcluster connect vcluster-a -n vcluster-a
+# --driver helm is required for Helm-managed vclusters (vcluster CLI v0.31+ defaults to platform driver)
+./bin/vcluster connect vcluster-a -n vcluster-a --driver helm
 kubectl get pods -A
 ./bin/vcluster disconnect
 

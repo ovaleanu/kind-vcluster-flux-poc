@@ -74,15 +74,15 @@ VCLUSTER_C ?= vcluster-c
 
 .PHONY: vctx
 vctx: vcluster cluster-ctx ## Configure vcluster contexts.
-	$(VCLUSTER) connect $(VCLUSTER_A) -n $(VCLUSTER_A)
-	$(VCLUSTER) connect $(VCLUSTER_B) -n $(VCLUSTER_B)
-	$(VCLUSTER) connect $(VCLUSTER_C) -n $(VCLUSTER_C)
+	$(VCLUSTER) connect $(VCLUSTER_A) -n $(VCLUSTER_A) --driver helm
+	$(VCLUSTER) connect $(VCLUSTER_B) -n $(VCLUSTER_B) --driver helm
+	$(VCLUSTER) connect $(VCLUSTER_C) -n $(VCLUSTER_C) --driver helm
 
 .PHONY: vcluster-delete
 vcluster-delete: vcluster cluster-ctx ## Delete vclusters.
-	-$(VCLUSTER) delete $(VCLUSTER_A) -n $(VCLUSTER_A)
-	-$(VCLUSTER) delete $(VCLUSTER_B) -n $(VCLUSTER_B)
-	-$(VCLUSTER) delete $(VCLUSTER_C) -n $(VCLUSTER_C)
+	-$(VCLUSTER) delete $(VCLUSTER_A) -n $(VCLUSTER_A) --driver helm
+	-$(VCLUSTER) delete $(VCLUSTER_B) -n $(VCLUSTER_B) --driver helm
+	-$(VCLUSTER) delete $(VCLUSTER_C) -n $(VCLUSTER_C) --driver helm
 
 .PHONY: wait-for-workloads
 wait-for-workloads: cluster-ctx ## Wait for all Flux reconciliations and workloads to be ready.
