@@ -4,5 +4,3 @@ kubeconfig_*
 .github
 .DS_Store
 TESTING.md
-/tests/check-prerequisites.sh
-/tests/health-check.sh
