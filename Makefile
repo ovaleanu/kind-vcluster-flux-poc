@@ -96,10 +96,12 @@ wait-for-workloads: cluster-ctx ## Wait for all Flux reconciliations and workloa
 	@kubectl wait statefulset/$(VCLUSTER_A) -n $(VCLUSTER_A) --for=jsonpath='{.status.readyReplicas}'=1 --timeout=5m
 	@kubectl wait statefulset/$(VCLUSTER_B) -n $(VCLUSTER_B) --for=jsonpath='{.status.readyReplicas}'=1 --timeout=5m
 	@kubectl wait statefulset/$(VCLUSTER_C) -n $(VCLUSTER_C) --for=jsonpath='{.status.readyReplicas}'=1 --timeout=5m
-	@echo "Waiting for tenant nginx pods..."
-	@kubectl wait pods -l app=nginx -n $(VCLUSTER_A) --for=condition=Ready --timeout=5m
-	@kubectl wait pods -l app=nginx -n $(VCLUSTER_B) --for=condition=Ready --timeout=5m
-	@kubectl wait pods -l app=nginx -n $(VCLUSTER_C) --for=condition=Ready --timeout=5m
+	@echo "Waiting for tenant nginx pods to appear and become ready..."
+	@for ns in $(VCLUSTER_A) $(VCLUSTER_B) $(VCLUSTER_C); do \
+		echo "  Waiting for nginx pod in $$ns..."; \
+		until kubectl get pods -l app=nginx -n $$ns --no-headers 2>/dev/null | grep -q .; do sleep 5; done; \
+		kubectl wait pods -l app=nginx -n $$ns --for=condition=Ready --timeout=5m; \
+	done
 	@echo "All workloads are ready."
 
 .PHONY: install
