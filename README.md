@@ -1,41 +1,42 @@
-## kind with cilium + vcluster + flux multi-tenancy PoC
-[vcluster](https://www.vcluster.com/) + [flux](https://fluxcd.io/) multi-tenancy  PoC
+# kind with cilium + vcluster + flux multi-tenancy PoC
 
-vcluster - Create fully functional virtual Kubernetes clusters - Each vcluster runs inside a namespace of the underlying host k8s cluster. 
+[vcluster](https://www.vcluster.com/) + [flux](https://fluxcd.io/) multi-tenancy PoC
 
-### Requirenments
+vcluster - Create fully functional virtual Kubernetes clusters - Each vcluster runs inside a namespace of the underlying host k8s cluster.
+
+## Requirements
+
 - Linux laptop/workstation
 - Docker installed
 - Go installed
 
 Install Go
-```
-$ wget https://go.dev/dl/go1.25.0.linux-amd64.tar.gz
-$ sudo tar -C /usr/local -xzf go1.25.0.linux-amd64.tar.gz
+```bash
+wget https://go.dev/dl/go1.25.0.linux-amd64.tar.gz
+sudo tar -C /usr/local -xzf go1.25.0.linux-amd64.tar.gz
 
-file: ~/.profile 
+# file: ~/.profile
 export PATH=$PATH:/usr/local/go/bin
 
-file ~/.bashrc
+# file: ~/.bashrc
 export GOROOT=/usr/local/go
 export PATH=${GOROOT}/bin:${PATH}
 export GOPATH=$HOME/go
 export PATH=${GOPATH}/bin:${PATH}
 
-$ source ./.profile
-$ go version
-go version go1.25.0 linux/amd64
-
+source ./.profile
+go version
+# go version go1.25.0 linux/amd64
 ```
 
-### Install
+## Install
 
 ```bash
 export GITHUB_TOKEN=<your-personal-access-token>
 make install
 ```
 
-### Automated End-to-End Tests
+## Automated End-to-End Tests
 
 Run the comprehensive test suite:
 
@@ -51,15 +52,15 @@ The e2e test validates:
 - VClusters (vcluster-a, vcluster-b, vcluster-c)
 - Tenant workloads
 - HTTP routing
-- Network Isolation between vClusters
+- Network isolation between vClusters
 
-### Adding a New Tenant
+See [tests/README.md](tests/README.md) for detailed test documentation.
+
+## Adding a New Tenant
 
 Each tenant gets its own virtual cluster (vcluster) with full isolation. An automated script handles all the file creation.
 
-#### Quick Start
-
-#### IP Address Allocation
+### IP Address Allocation
 
 The MetalLB pool is `172.18.0.200-172.18.0.220`. Current allocations:
 
@@ -87,10 +88,10 @@ flux reconcile ks flux-system --with-source
 # Verify
 curl -Lk --resolve tenant-d.traefik.local:80:172.18.0.200 \
   --resolve tenant-d.traefik.local:443:172.18.0.200 \
-   http://tenant-d.traefik.local
+  http://tenant-d.traefik.local
 ```
 
-#### What the Script Creates
+### What the Script Creates
 
 Running `./hack/add-tenant.sh <name> <ip>` creates these files:
 
@@ -129,13 +130,13 @@ It also modifies:
 - `infrastructure/network-policies/kustomization.yaml` - registers the new NetworkPolicy file
 - `/etc/hosts` - adds `tenant-<name>.traefik.local` entry pointing to Traefik IP
 
-#### Test vCluster Connectivity
+### Test vCluster Connectivity
 
-Connect to vcluster-d:
+After adding a tenant, connect to verify:
 
 ```bash
-# Connect to vcluster-d
-./bin/vcluster connect vcluster-d -n vcluster-d
+# Connect to the new vcluster
+./bin/vcluster connect vcluster-<name> -n vcluster-<name>
 
 # Check namespaces inside vcluster
 kubectl get namespaces
@@ -152,7 +153,7 @@ kubectl get svc
 ./bin/vcluster disconnect
 ```
 
-#### Removing a Tenant
+### Removing a Tenant
 
 ```bash
 make remove-tenant TENANT_NAME=d
@@ -160,8 +161,7 @@ git add -A && git commit -m "Remove tenant-d and vcluster-d" && git push
 flux reconcile ks flux-system --with-source
 ```
 
-
-#### Architecture
+## Architecture
 
 ```
                     Host Cluster (kind)
@@ -237,14 +237,13 @@ kill %1 %2
 The default username is `admin`. To retrieve the password:
 
 ```bash
-# Get Grafana admin password
 kubectl get secret -n kube-prometheus-stack kube-prometheus-stack-grafana \
   -o jsonpath='{.data.admin-password}' | base64 -d && echo
 ```
 
 ---
 
-## Network Isolation Testing
+## Network Isolation
 
 The cluster uses Cilium CNI with NetworkPolicies to enforce tenant isolation. Each vcluster namespace has a default-deny ingress policy with explicit allow rules for required traffic.
 
@@ -255,17 +254,16 @@ The cluster uses Cilium CNI with NetworkPolicies to enforce tenant isolation. Ea
 kubectl get networkpolicies -n vcluster-a
 kubectl get networkpolicies -n vcluster-b
 kubectl get networkpolicies -n vcluster-c
-kubectl get networkpolicies -n vcluster-d
 
 # Expected policies per namespace:
-#   deny-all-ingress          - Default deny all inbound traffic
-#   allow-same-namespace      - Pods within the namespace can communicate
-#   allow-traefik-ingress     - Traefik can reach nginx on port 80
-#   allow-flux-to-vcluster-api - Flux can deploy workloads on port 8443
-#   allow-dns                 - DNS resolution from kube-system
-#   allow-prometheus-scraping - Prometheus metrics scraping
+#   deny-all-ingress            - Default deny all inbound traffic
+#   allow-same-namespace        - Pods within the namespace can communicate
+#   allow-traefik-ingress       - Traefik can reach nginx on port 80
+#   allow-flux-to-vcluster-api  - Flux can deploy workloads on port 8443
+#   allow-dns                   - DNS resolution from kube-system
+#   allow-prometheus-scraping   - Prometheus metrics scraping
 #   allow-external-vcluster-api - External vcluster connect on port 8443
-#   allow-metallb             - MetalLB speaker communication
+#   allow-metallb               - MetalLB speaker communication
 ```
 
 ### Test Cross-VCluster Isolation (Should Be Blocked)
@@ -288,11 +286,6 @@ kubectl run test-isolation --rm -i --restart=Never --image=busybox -n vcluster-a
 
 # Test: vcluster-b -> vcluster-a (should timeout)
 kubectl run test-isolation --rm -i --restart=Never --image=busybox -n vcluster-b \
-  -- wget -qO- --timeout=3 http://nginx-x-default-x-vcluster-a.vcluster-a.svc:80
-# Expected: "wget: download timed out"
-
-# Test: vcluster-d -> vcluster-a (should timeout)
-kubectl run test-isolation --rm -i --restart=Never --image=busybox -n vcluster-d \
   -- wget -qO- --timeout=3 http://nginx-x-default-x-vcluster-a.vcluster-a.svc:80
 # Expected: "wget: download timed out"
 ```
@@ -338,11 +331,6 @@ curl -Lk --resolve tenant-b.traefik.local:80:${TRAEFIK_IP} \
 curl -Lk --resolve tenant-c.traefik.local:80:${TRAEFIK_IP} \
   --resolve tenant-c.traefik.local:443:${TRAEFIK_IP} \
   http://tenant-c.traefik.local
-
-# Traefik -> tenant-d
-curl -Lk --resolve tenant-d.traefik.local:80:${TRAEFIK_IP} \
-  --resolve tenant-d.traefik.local:443:${TRAEFIK_IP} \
-  http://tenant-d.traefik.local
 ```
 
 ### Test External VCluster API Access (Should Work)
@@ -357,7 +345,6 @@ kubectl get pods -A
 curl -sk https://172.18.0.210:443/healthz   # vcluster-a
 curl -sk https://172.18.0.211:443/healthz   # vcluster-b
 curl -sk https://172.18.0.214:443/healthz   # vcluster-c
-curl -sk https://172.18.0.215:443/healthz   # vcluster-d
 # Expected: "ok"
 ```
 
@@ -376,20 +363,18 @@ curl -sk https://172.18.0.215:443/healthz   # vcluster-d
 
 ---
 
-### Hubble UI (Web Dashboard)
+## Hubble UI
 
-Here's how to access Hubble:
+The Hubble UI is running as a ClusterIP service. Use port-forward to access it:
 
-Hubble UI (Web Dashboard)
-The Hubble UI is running as a ClusterIP service, so use port-forward to access it:
-
-
+```bash
 kubectl port-forward -n kube-system svc/hubble-ui 12000:80
-Then open http://localhost:12000 in your browser. 
+```
+
+Then open http://localhost:12000 in your browser.
 
 ---
 
 REF: https://github.com/loft-sh/vcluster
 
 [Credits](https://github.com/mmontes11/vcluster-poc)
-

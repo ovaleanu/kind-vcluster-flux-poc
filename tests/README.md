@@ -1,34 +1,10 @@
 # End-to-End Testing Suite
 
-This directory contains comprehensive testing scripts for the kind-vcluster-flux-poc project.
+This directory contains the end-to-end testing script for the kind-vcluster-flux-poc project.
 
-## Test Scripts
+## Test Script
 
-### 1. Prerequisites Check (`check-prerequisites.sh`)
-
-Validates that all prerequisites are met and checks the current state of the cluster.
-
-**Usage:**
-```bash
-./tests/check-prerequisites.sh
-```
-
-**What it checks:**
-- Docker installation and status
-- kubectl installation
-- Go installation
-- curl availability
-- Local tools (kind, flux, vcluster) in `./bin/` directory
-- `/etc/hosts` configuration
-- Cluster running status
-- Basic deployment status (if cluster is running)
-
-**When to use:**
-- Before deploying the cluster
-- To troubleshoot setup issues
-- To verify prerequisites are met
-
-### 2. End-to-End Test (`e2e-test.sh`)
+### End-to-End Test (`e2e-test.sh`)
 
 Comprehensive end-to-end test suite that validates the entire deployment.
 
@@ -53,36 +29,44 @@ Comprehensive end-to-end test suite that validates the entire deployment.
 #### Infrastructure Components
 - **MetalLB**: Controller deployment, IPAddressPool configuration
 - **cert-manager**: Controller deployment
-- **Traefik**: Deployment, LoadBalancer service, Gateway configuration
+- **Traefik**: Deployment, LoadBalancer service (172.18.0.200), Gateway configuration
 - **Gateway API**: GatewayClass and Gateway resources
 - **Kube-Prometheus-Stack**: Prometheus StatefulSet
 
 #### Virtual Clusters
-- VCluster namespaces
+- VCluster namespaces (vcluster-a, vcluster-b, vcluster-c)
 - VCluster StatefulSets
 - VCluster pod readiness
-- LoadBalancer IP assignments (172.17.0.210 for vcluster-a, 172.17.0.211 for vcluster-b)
+- LoadBalancer IP assignments (172.18.0.210 for vcluster-a, 172.18.0.211 for vcluster-b, 172.18.0.214 for vcluster-c)
 
 #### Tenant Workloads
-- Tenant namespaces (tenant-a, tenant-b)
-- Nginx deployments
+- Tenant namespaces (tenant-a, tenant-b, tenant-c)
 - HTTPRoute configurations
+- Nginx service sync from vclusters to host cluster
 
 #### HTTP Routes (End-to-End)
 - Traefik endpoint accessibility
 - Tenant A nginx HTTP endpoint (http://tenant-a.traefik.local)
 - Tenant B nginx HTTP endpoint (http://tenant-b.traefik.local)
+- Tenant C nginx HTTP endpoint (http://tenant-c.traefik.local)
 - Response content validation
+- Uses `--resolve` flags to avoid `/etc/hosts` dependency
+
+#### Network Isolation
+- NetworkPolicy existence in each vcluster namespace (deny-all-ingress, allow-same-namespace, allow-traefik-ingress, allow-flux-to-vcluster-api, allow-external-vcluster-api)
+- Cross-vcluster isolation (traffic between vcluster namespaces should be blocked)
+- Same-namespace communication (traffic within a vcluster namespace should be allowed)
+- External vcluster API access via LoadBalancer IPs
 
 #### Resource Summary
 - Overview of all namespaces, HelmReleases, Kustomizations, HTTPRoutes, and Gateways
 
 **Test Results:**
 The script provides color-coded output:
-- 🟢 GREEN: Test passed
-- 🔴 RED: Test failed
-- 🟡 YELLOW: Test in progress
-- 🔵 BLUE: Informational message
+- GREEN: Test passed
+- RED: Test failed
+- YELLOW: Test in progress
+- BLUE: Informational message
 
 ## Prerequisites
 
@@ -97,27 +81,17 @@ Before running the end-to-end tests, ensure:
 2. **All prerequisites are met:**
    - Docker is running
    - kubectl is installed
-   - /etc/hosts is configured
-
-3. **Verify setup:**
-   ```bash
-   ./tests/check-prerequisites.sh
-   ```
+   - /etc/hosts is configured (optional -- tests use `--resolve` flags)
 
 ## Quick Start
 
-1. Check prerequisites:
-   ```bash
-   ./tests/check-prerequisites.sh
-   ```
-
-2. If cluster is not running, deploy it:
+1. If cluster is not running, deploy it:
    ```bash
    export GITHUB_TOKEN=<your-github-token>
    make install
    ```
 
-3. Run end-to-end tests:
+2. Run end-to-end tests:
    ```bash
    ./tests/e2e-test.sh
    ```
@@ -139,11 +113,6 @@ If HTTP route tests fail:
 ```bash
 # Check /etc/hosts
 cat /etc/hosts | grep traefik
-
-# If missing, add entries
-sudo ./hack/add_host.sh 172.18.0.200 traefik.local
-sudo ./hack/add_host.sh 172.18.0.200 tenant-a.traefik.local
-sudo ./hack/add_host.sh 172.18.0.200 tenant-b.traefik.local
 
 # Verify Traefik LoadBalancer IP
 kubectl get svc -n traefik
@@ -167,10 +136,24 @@ If VClusters are not ready:
 # Check VCluster status
 kubectl get statefulsets -n vcluster-a
 kubectl get statefulsets -n vcluster-b
+kubectl get statefulsets -n vcluster-c
 
 # Check VCluster logs
 kubectl logs -n vcluster-a statefulset/vcluster-a
 kubectl logs -n vcluster-b statefulset/vcluster-b
+kubectl logs -n vcluster-c statefulset/vcluster-c
+```
+
+### Network Isolation Test Failures
+If cross-vcluster isolation tests fail:
+```bash
+# Check NetworkPolicies are applied
+kubectl get networkpolicies -n vcluster-a
+kubectl get networkpolicies -n vcluster-b
+kubectl get networkpolicies -n vcluster-c
+
+# Verify Cilium is running
+kubectl get pods -n kube-system -l k8s-app=cilium
 ```
 
 ## Test Results Interpretation
@@ -180,8 +163,9 @@ The entire stack is deployed correctly and functional:
 - Host cluster is healthy
 - Flux is reconciling successfully
 - All infrastructure components are running
-- Both VClusters are operational
+- All VClusters (a, b, c) are operational
 - Tenant workloads are accessible via HTTP
+- Network isolation between vclusters is enforced
 
 ### Some Tests Fail (Exit Code 1)
 Check the test output to identify which component failed:
@@ -191,6 +175,7 @@ Check the test output to identify which component failed:
 - **VCluster failures**: Check StatefulSet status, LoadBalancer configuration
 - **Tenant failures**: Check deployment status, HTTPRoute configuration
 - **HTTP failures**: Check /etc/hosts, Traefik service, network connectivity
+- **Network isolation failures**: Check NetworkPolicies, Cilium status
 
 ## Continuous Integration
 
@@ -198,20 +183,20 @@ These tests can be integrated into CI/CD pipelines:
 
 ```bash
 # In your CI script
-./tests/check-prerequisites.sh || exit 1
 ./tests/e2e-test.sh || exit 1
 ```
 
 ## Test Coverage
 
 The test suite provides comprehensive coverage:
-- ✅ Cluster provisioning and configuration
-- ✅ GitOps deployment via Flux
-- ✅ Infrastructure components
-- ✅ Virtual cluster multi-tenancy
-- ✅ Tenant workload deployment
-- ✅ Network routing and ingress
-- ✅ End-to-end HTTP connectivity
+- Cluster provisioning and configuration
+- GitOps deployment via Flux
+- Infrastructure components (MetalLB, Traefik, cert-manager, Prometheus)
+- Virtual cluster multi-tenancy (vcluster-a, vcluster-b, vcluster-c)
+- Tenant workload deployment
+- Network routing and ingress
+- End-to-end HTTP connectivity
+- Network isolation between vclusters
 
 ## Adding New Tests
 
