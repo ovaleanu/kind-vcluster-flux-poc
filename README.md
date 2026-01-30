@@ -1,4 +1,4 @@
-## kind + vcluster + flux multi-tenancy PoC
+## kind with cilium + vcluster + flux multi-tenancy PoC
 [vcluster](https://www.vcluster.com/) + [flux](https://fluxcd.io/) multi-tenancy  PoC
 
 vcluster - Create fully functional virtual Kubernetes clusters - Each vcluster runs inside a namespace of the underlying host k8s cluster. 
