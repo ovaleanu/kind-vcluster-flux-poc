@@ -34,20 +34,12 @@ go version go1.25.0 linux/amd64
 export GITHUB_TOKEN=<your-personal-access-token>
 make install
 ```
-### Quick Health Check Script
-
-```bash
-./tests/health-check.sh
-```
 
 ### Automated End-to-End Tests
 
 Run the comprehensive test suite:
 
 ```bash
-# Check prerequisites first
-./tests/check-prerequisites.sh
-
 # Run full end-to-end tests (50+ tests)
 ./tests/e2e-test.sh
 ```
@@ -56,9 +48,10 @@ The e2e test validates:
 - Host cluster health
 - Flux GitOps reconciliation
 - Infrastructure (MetalLB, Traefik, cert-manager, Prometheus)
-- VClusters (vcluster-a, vcluster-b)
+- VClusters (vcluster-a, vcluster-b, vcluster-c)
 - Tenant workloads
 - HTTP routing
+- Network Isolation between vClusters
 
 ### Adding a New Tenant
 
