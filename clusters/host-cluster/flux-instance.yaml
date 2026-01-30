@@ -19,7 +19,7 @@ spec:
     domain: "cluster.local"
   sync:
     kind: GitRepository
-    url: "https://github.com/ovaleanu/kind-vcluster-flux-poc.git"
-    ref: "refs/heads/main"
+    url: "https://github.com/${GITHUB_USER}/${GITHUB_REPO}.git"
+    ref: "refs/heads/${GITHUB_BRANCH}"
     path: "clusters/host-cluster"
     pullSecret: "flux-system"
