@@ -49,7 +49,7 @@ remove-tenant: ## Remove a tenant. Usage: make remove-tenant TENANT_NAME=d
 
 GITHUB_USER ?= ovaleanu
 GITHUB_REPO ?= kind-vcluster-flux-poc
-GITHUB_BRANCH ?= feat/add-cilium
+GITHUB_BRANCH ?= main
 .PHONY: deploy
 deploy: flux cluster-ctx ## Deploy PoC.
 	$(FLUX) bootstrap github \
