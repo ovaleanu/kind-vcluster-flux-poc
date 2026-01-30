@@ -49,7 +49,7 @@ remove-tenant: ## Remove a tenant. Usage: make remove-tenant TENANT_NAME=d
 
 GITHUB_USER ?= ovaleanu
 GITHUB_REPO ?= kind-vcluster-flux-poc
-GITHUB_BRANCH ?= main
+GITHUB_BRANCH ?= feat/flux-operator
 FLUX_INSTANCE ?= clusters/host-cluster/flux-instance.yaml
 .PHONY: deploy
 deploy: flux cluster-ctx ## Deploy Flux Operator and FluxInstance.
@@ -84,8 +84,26 @@ vcluster-delete: vcluster cluster-ctx ## Delete vclusters.
 	-$(VCLUSTER) delete $(VCLUSTER_B) -n $(VCLUSTER_B)
 	-$(VCLUSTER) delete $(VCLUSTER_C) -n $(VCLUSTER_C)
 
+.PHONY: wait-for-workloads
+wait-for-workloads: cluster-ctx ## Wait for all Flux reconciliations and workloads to be ready.
+	@echo "Waiting for root Kustomization to be ready..."
+	@kubectl wait kustomization.kustomize.toolkit.fluxcd.io/flux-system \
+		-n flux-system --for=condition=Ready --timeout=5m
+	@echo "Waiting for all Flux Kustomizations to reconcile..."
+	@kubectl wait kustomization.kustomize.toolkit.fluxcd.io --all \
+		-n flux-system --for=condition=Ready --timeout=15m
+	@echo "Waiting for VCluster StatefulSets..."
+	@kubectl wait statefulset/$(VCLUSTER_A) -n $(VCLUSTER_A) --for=jsonpath='{.status.readyReplicas}'=1 --timeout=5m
+	@kubectl wait statefulset/$(VCLUSTER_B) -n $(VCLUSTER_B) --for=jsonpath='{.status.readyReplicas}'=1 --timeout=5m
+	@kubectl wait statefulset/$(VCLUSTER_C) -n $(VCLUSTER_C) --for=jsonpath='{.status.readyReplicas}'=1 --timeout=5m
+	@echo "Waiting for tenant nginx pods..."
+	@kubectl wait pods -l app=nginx -n $(VCLUSTER_A) --for=condition=Ready --timeout=5m
+	@kubectl wait pods -l app=nginx -n $(VCLUSTER_B) --for=condition=Ready --timeout=5m
+	@kubectl wait pods -l app=nginx -n $(VCLUSTER_C) --for=condition=Ready --timeout=5m
+	@echo "All workloads are ready."
+
 .PHONY: install
-install: network cluster cilium-install deploy ## Install cluster and PoC.
+install: network cluster cilium-install deploy wait-for-workloads ## Install cluster and PoC.
 
 .PHONY: uninstall
 uninstall: cluster-delete ## Tear down cluster.
