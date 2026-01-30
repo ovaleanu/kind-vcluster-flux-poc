@@ -47,18 +47,22 @@ remove-tenant: ## Remove a tenant. Usage: make remove-tenant TENANT_NAME=d
 	fi
 	./hack/remove-tenant.sh $(TENANT_NAME)
 
-GITHUB_USER ?= ovaleanu
-GITHUB_REPO ?= kind-vcluster-flux-poc
-GITHUB_BRANCH ?= main
+FLUX_INSTANCE ?= clusters/host-cluster/flux-instance.yaml
 .PHONY: deploy
-deploy: flux cluster-ctx ## Deploy PoC.
-	$(FLUX) bootstrap github \
-		--owner=$(GITHUB_USER) \
-		--repository=$(GITHUB_REPO) \
-		--branch=$(GITHUB_BRANCH) \
-		--private=false \
-		--personal=true \
-		--path=clusters/host-cluster
+deploy: flux cluster-ctx ## Deploy Flux Operator and FluxInstance.
+	@echo "Installing Flux Operator..."
+	@helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator \
+		--namespace flux-system --create-namespace --wait
+	@echo "Creating Git credentials secret..."
+	@kubectl create secret generic flux-system \
+		--namespace=flux-system \
+		--from-literal=username=git \
+		--from-literal=password=$(GITHUB_TOKEN) \
+		--dry-run=client -o yaml | kubectl apply -f -
+	@echo "Applying FluxInstance..."
+	@kubectl apply -f $(FLUX_INSTANCE)
+	@echo "Waiting for Flux controllers to be ready..."
+	@kubectl -n flux-system wait fluxinstance/flux --for=condition=Ready --timeout=5m
 
 VCLUSTER_A ?= vcluster-a
 VCLUSTER_B ?= vcluster-b
