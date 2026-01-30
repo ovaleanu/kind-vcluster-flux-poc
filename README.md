@@ -1,6 +1,6 @@
 # kind with cilium + vcluster + flux multi-tenancy PoC
 
-[vcluster](https://www.vcluster.com/) + [flux](https://fluxcd.io/) multi-tenancy PoC
+[vcluster](https://www.vcluster.com/) + [Flux Operator](https://fluxcd.control-plane.io/operator/) multi-tenancy PoC
 
 vcluster - Create fully functional virtual Kubernetes clusters - Each vcluster runs inside a namespace of the underlying host k8s cluster.
 
@@ -9,6 +9,7 @@ vcluster - Create fully functional virtual Kubernetes clusters - Each vcluster r
 - Linux laptop/workstation
 - Docker installed
 - Go installed
+- Helm installed
 
 Install Go
 ```bash
@@ -30,6 +31,8 @@ go version
 ```
 
 ## Install
+
+Flux is managed via the [Flux Operator](https://fluxcd.control-plane.io/operator/) and a `FluxInstance` CRD (see [flux-instance.yaml](clusters/host-cluster/flux-instance.yaml)). The `make install` target installs the operator, creates Git credentials from `GITHUB_TOKEN`, and applies the FluxInstance.
 
 ```bash
 export GITHUB_TOKEN=<your-personal-access-token>
@@ -135,8 +138,8 @@ It also modifies:
 After adding a tenant, connect to verify:
 
 ```bash
-# Connect to the new vcluster
-./bin/vcluster connect vcluster-<name> -n vcluster-<name>
+# Connect to the new vcluster (--driver helm is required for Helm-managed vclusters)
+./bin/vcluster connect vcluster-<name> -n vcluster-<name> --driver helm
 
 # Check namespaces inside vcluster
 kubectl get namespaces
@@ -337,7 +340,8 @@ curl -Lk --resolve tenant-c.traefik.local:80:${TRAEFIK_IP} \
 
 ```bash
 # vcluster connect uses the LoadBalancer IP to reach the vcluster API
-./bin/vcluster connect vcluster-a -n vcluster-a
+# --driver helm is required for Helm-managed vclusters (vcluster CLI v0.31+ defaults to platform driver)
+./bin/vcluster connect vcluster-a -n vcluster-a --driver helm
 kubectl get pods -A
 ./bin/vcluster disconnect
 

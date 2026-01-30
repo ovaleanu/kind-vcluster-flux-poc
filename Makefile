@@ -50,15 +50,23 @@ remove-tenant: ## Remove a tenant. Usage: make remove-tenant TENANT_NAME=d
 GITHUB_USER ?= ovaleanu
 GITHUB_REPO ?= kind-vcluster-flux-poc
 GITHUB_BRANCH ?= main
+FLUX_INSTANCE ?= clusters/host-cluster/flux-instance.yaml
 .PHONY: deploy
-deploy: flux cluster-ctx ## Deploy PoC.
-	$(FLUX) bootstrap github \
-		--owner=$(GITHUB_USER) \
-		--repository=$(GITHUB_REPO) \
-		--branch=$(GITHUB_BRANCH) \
-		--private=false \
-		--personal=true \
-		--path=clusters/host-cluster
+deploy: flux cluster-ctx ## Deploy Flux Operator and FluxInstance.
+	@echo "Installing Flux Operator..."
+	@helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator \
+		--namespace flux-system --create-namespace --wait
+	@echo "Creating Git credentials secret..."
+	@kubectl create secret generic flux-system \
+		--namespace=flux-system \
+		--from-literal=username=git \
+		--from-literal=password=$(GITHUB_TOKEN) \
+		--dry-run=client -o yaml | kubectl apply -f -
+	@echo "Applying FluxInstance..."
+	@export GITHUB_USER=$(GITHUB_USER) GITHUB_REPO=$(GITHUB_REPO) GITHUB_BRANCH=$(GITHUB_BRANCH) && \
+		envsubst '$$GITHUB_USER $$GITHUB_REPO $$GITHUB_BRANCH' < $(FLUX_INSTANCE) | kubectl apply -f -
+	@echo "Waiting for Flux controllers to be ready..."
+	@kubectl -n flux-system wait fluxinstance/flux --for=condition=Ready --timeout=5m
 
 VCLUSTER_A ?= vcluster-a
 VCLUSTER_B ?= vcluster-b
@@ -66,18 +74,38 @@ VCLUSTER_C ?= vcluster-c
 
 .PHONY: vctx
 vctx: vcluster cluster-ctx ## Configure vcluster contexts.
-	$(VCLUSTER) connect $(VCLUSTER_A) -n $(VCLUSTER_A)
-	$(VCLUSTER) connect $(VCLUSTER_B) -n $(VCLUSTER_B)
-	$(VCLUSTER) connect $(VCLUSTER_C) -n $(VCLUSTER_C)
+	$(VCLUSTER) connect $(VCLUSTER_A) -n $(VCLUSTER_A) --driver helm
+	$(VCLUSTER) connect $(VCLUSTER_B) -n $(VCLUSTER_B) --driver helm
+	$(VCLUSTER) connect $(VCLUSTER_C) -n $(VCLUSTER_C) --driver helm
 
 .PHONY: vcluster-delete
 vcluster-delete: vcluster cluster-ctx ## Delete vclusters.
-	-$(VCLUSTER) delete $(VCLUSTER_A) -n $(VCLUSTER_A)
-	-$(VCLUSTER) delete $(VCLUSTER_B) -n $(VCLUSTER_B)
-	-$(VCLUSTER) delete $(VCLUSTER_C) -n $(VCLUSTER_C)
+	-$(VCLUSTER) delete $(VCLUSTER_A) -n $(VCLUSTER_A) --driver helm
+	-$(VCLUSTER) delete $(VCLUSTER_B) -n $(VCLUSTER_B) --driver helm
+	-$(VCLUSTER) delete $(VCLUSTER_C) -n $(VCLUSTER_C) --driver helm
+
+.PHONY: wait-for-workloads
+wait-for-workloads: cluster-ctx ## Wait for all Flux reconciliations and workloads to be ready.
+	@echo "Waiting for root Kustomization to be ready..."
+	@kubectl wait kustomization.kustomize.toolkit.fluxcd.io/flux-system \
+		-n flux-system --for=condition=Ready --timeout=5m
+	@echo "Waiting for all Flux Kustomizations to reconcile..."
+	@kubectl wait kustomization.kustomize.toolkit.fluxcd.io --all \
+		-n flux-system --for=condition=Ready --timeout=15m
+	@echo "Waiting for VCluster StatefulSets..."
+	@kubectl wait statefulset/$(VCLUSTER_A) -n $(VCLUSTER_A) --for=jsonpath='{.status.readyReplicas}'=1 --timeout=5m
+	@kubectl wait statefulset/$(VCLUSTER_B) -n $(VCLUSTER_B) --for=jsonpath='{.status.readyReplicas}'=1 --timeout=5m
+	@kubectl wait statefulset/$(VCLUSTER_C) -n $(VCLUSTER_C) --for=jsonpath='{.status.readyReplicas}'=1 --timeout=5m
+	@echo "Waiting for tenant nginx pods to appear and become ready..."
+	@for ns in $(VCLUSTER_A) $(VCLUSTER_B) $(VCLUSTER_C); do \
+		echo "  Waiting for nginx pod in $$ns..."; \
+		until kubectl get pods -l app=nginx -n $$ns --no-headers 2>/dev/null | grep -q .; do sleep 5; done; \
+		kubectl wait pods -l app=nginx -n $$ns --for=condition=Ready --timeout=5m; \
+	done
+	@echo "All workloads are ready."
 
 .PHONY: install
-install: network cluster cilium-install deploy ## Install cluster and PoC.
+install: network cluster cilium-install deploy wait-for-workloads ## Install cluster and PoC.
 
 .PHONY: uninstall
 uninstall: cluster-delete ## Tear down cluster.
