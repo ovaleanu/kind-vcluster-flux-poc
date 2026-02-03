@@ -18,12 +18,14 @@ help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 TRAEFIK_IP ?= 172.18.0.200
+VCLUSTER_PLATFORM_IP ?= 172.18.0.219
 .PHONY: network
 network: ## Configure network.
 	@./hack/add_host.sh $(TRAEFIK_IP) traefik.local
 	@./hack/add_host.sh $(TRAEFIK_IP) tenant-a.traefik.local
 	@./hack/add_host.sh $(TRAEFIK_IP) tenant-b.traefik.local
 	@./hack/add_host.sh $(TRAEFIK_IP) tenant-c.traefik.local
+	@./hack/add_host.sh $(VCLUSTER_PLATFORM_IP) vcluster-platform.traefik.local
 
 ##@ Tenant Management
 

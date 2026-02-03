@@ -1,0 +1,25 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: vcluster-platform
+spec:
+  chart:
+    spec:
+      chart: vcluster-platform
+      sourceRef:
+        kind: HelmRepository
+        name: loft
+      version: "4.4.0"
+  interval: 2m
+  timeout: 10m
+  values:
+    admin:
+      create: true
+      username: admin
+      password: "admin"
+    service:
+      type: LoadBalancer
+      annotations:
+        metallb.universe.tf/loadBalancerIPs: 172.18.0.219
+    config:
+      loftHost: "172.18.0.219"

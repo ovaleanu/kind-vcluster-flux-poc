@@ -1,0 +1,123 @@
+# Default deny all ingress traffic to vcluster-platform namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-ingress
+  namespace: vcluster-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Allow pods within vcluster-platform to communicate with each other
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: vcluster-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+---
+# Allow DNS resolution from kube-system
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: vcluster-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Allow external access to vcluster-platform (LoadBalancer, browser UI)
+# Traffic from outside the cluster arrives via kube-proxy SNAT with pod CIDR source IPs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-external-platform-access
+  namespace: vcluster-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8443
+        - protocol: TCP
+          port: 9443
+        - protocol: TCP
+          port: 9444
+---
+# Allow Prometheus to scrape metrics
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scraping
+  namespace: vcluster-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-prometheus-stack
+---
+# Allow MetalLB speaker communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-metallb
+  namespace: vcluster-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: metallb-system
+---
+# Allow vcluster namespaces to reach the platform API
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-vcluster-to-platform
+  namespace: vcluster-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  - vcluster-a
+                  - vcluster-b
+                  - vcluster-c
+      ports:
+        - protocol: TCP
+          port: 8443
+        - protocol: TCP
+          port: 9443

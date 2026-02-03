@@ -4,3 +4,4 @@ resources:
   - vcluster-a-netpol.yaml
   - vcluster-b-netpol.yaml
   - vcluster-c-netpol.yaml
+  - vcluster-platform-netpol.yaml
