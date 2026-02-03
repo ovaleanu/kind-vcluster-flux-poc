@@ -58,11 +58,11 @@ spec:
   ingress:
     - ports:
         - protocol: TCP
-          port: 8443
+          port: 8080
+        - protocol: TCP
+          port: 10443
         - protocol: TCP
           port: 9443
-        - protocol: TCP
-          port: 9444
 ---
 # Allow Prometheus to scrape metrics
 apiVersion: networking.k8s.io/v1
@@ -118,6 +118,8 @@ spec:
                   - vcluster-c
       ports:
         - protocol: TCP
-          port: 8443
+          port: 8080
+        - protocol: TCP
+          port: 10443
         - protocol: TCP
           port: 9443
