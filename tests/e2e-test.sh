@@ -344,7 +344,7 @@ test_network_isolation() {
 
     # Discover all vcluster namespaces dynamically
     local VCLUSTER_NAMESPACES
-    VCLUSTER_NAMESPACES=$(kubectl get ns --no-headers -o custom-columns=':metadata.name' | grep '^vcluster-' | sort)
+    VCLUSTER_NAMESPACES=$(kubectl get ns --no-headers -o custom-columns=':metadata.name' | grep '^vcluster-' | grep -v 'vcluster-platform' | sort)
 
     if [ -z "$VCLUSTER_NAMESPACES" ]; then
         print_failure "No vcluster namespaces found - skipping network isolation tests"

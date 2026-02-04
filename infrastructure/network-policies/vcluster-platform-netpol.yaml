@@ -63,6 +63,8 @@ spec:
         - protocol: TCP
           port: 9443
         - protocol: TCP
+          port: 9444
+        - protocol: TCP
           port: 9888
 ---
 # Allow external access to vcluster-platform (LoadBalancer, browser UI)
