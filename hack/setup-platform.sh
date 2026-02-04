@@ -5,9 +5,13 @@
 # This script performs the imperative operations that cannot be
 # expressed as Kubernetes manifests:
 #   1. Wait for the vCluster Platform to be healthy
-#   2. Login to the platform via LoadBalancer IP
-#   3. Add the host cluster to the platform
-#   4. Import each vCluster as managed into the platform
+#   2. Configure CLI access (write config directly, no login command)
+#   3. Check platform license activation
+#   4. Import each vCluster into the platform (if licensed)
+#
+# The platform automatically knows about its own cluster (loft-cluster),
+# so we do NOT run "vcluster platform add cluster" which would install
+# an agent Helm chart that conflicts with the Flux-managed HelmRelease.
 #
 # Prerequisites:
 #   - Kind cluster is running with Flux deployed
@@ -16,9 +20,6 @@
 #
 # Usage:
 #   ./hack/setup-platform.sh
-#
-# The script uses the LoadBalancer IP (not port-forward) so that
-# the vcluster-platform-api-key secrets get the correct host value.
 #
 
 set -euo pipefail
@@ -30,6 +31,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 VCLUSTER_CLI="${REPO_ROOT}/bin/vcluster"
 PLATFORM_IP="${VCLUSTER_PLATFORM_IP:-172.18.0.219}"
 PLATFORM_URL="https://${PLATFORM_IP}"
+PLATFORM_INTERNAL_HOST="https://loft.vcluster-platform.svc:443"
 PLATFORM_NAMESPACE="vcluster-platform"
 ADMIN_USER="admin"
 ADMIN_PASSWORD="admin"
@@ -73,116 +75,127 @@ done
 ok "Platform LoadBalancer IP: ${PLATFORM_IP}"
 
 info "Waiting for platform HTTPS health endpoint..."
-until curl -sk --max-time 5 "${PLATFORM_URL}/healthz" 2>/dev/null | grep -q "ok"; do
+until curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "${PLATFORM_URL}/healthz" 2>/dev/null | grep -q "200"; do
     sleep 5
 done
 ok "Platform is healthy at ${PLATFORM_URL}"
 
 # ============================================================
-# Phase 2: Login to platform via LoadBalancer IP
+# Phase 2: Configure CLI access to platform
 # ============================================================
 echo ""
-echo "=== Phase 2: Login to vCluster Platform ==="
+echo "=== Phase 2: Configure CLI access to vCluster Platform ==="
 
-${VCLUSTER_CLI} login "${PLATFORM_URL}" \
-    --username "${ADMIN_USER}" \
-    --password "${ADMIN_PASSWORD}" \
-    --insecure
+info "Obtaining access key via platform API..."
+ACCESS_KEY=$(curl -sk --max-time 10 -X POST "${PLATFORM_URL}/auth/password/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASSWORD}\"}" \
+    | sed -n 's/.*"accessKey":"\([^"]*\)".*/\1/p')
 
-ok "Logged in to platform at ${PLATFORM_URL}"
+if [ -z "${ACCESS_KEY}" ]; then
+    echo "ERROR: Failed to obtain access key from platform API"
+    exit 1
+fi
 
-# ============================================================
-# Phase 3: Add host cluster to platform
-# ============================================================
-echo ""
-echo "=== Phase 3: Adding host cluster to platform ==="
+# Write CLI config directly instead of running "vcluster platform login"
+# which tries to verify user access and fails with session-scoped keys.
+VCLUSTER_CONFIG_DIR="${HOME}/.vcluster"
+VCLUSTER_CONFIG="${VCLUSTER_CONFIG_DIR}/config.json"
 
-# Switch to host cluster context
+mkdir -p "${VCLUSTER_CONFIG_DIR}"
+cat > "${VCLUSTER_CONFIG}" <<CFGEOF
+{
+  "platform": {
+    "kind": "Config",
+    "apiVersion": "storage.loft.sh/v1",
+    "host": "${PLATFORM_URL}",
+    "accesskey": "${ACCESS_KEY}",
+    "insecure": true
+  }
+}
+CFGEOF
+
+ok "CLI configured for platform at ${PLATFORM_URL}"
+
+# Ensure kubectl points at the host cluster
 kubectl config use-context kind-host-cluster
 
-if ${VCLUSTER_CLI} platform get cluster local-cluster --insecure &>/dev/null; then
-    warn "Host cluster 'local-cluster' already registered, skipping."
-else
-    # Patch Helm ownership metadata on any existing platform secrets
-    for secret_name in loft-agent-connection loft-agent-config loft-agent-token; do
-        if kubectl get secret "${secret_name}" -n "${PLATFORM_NAMESPACE}" &>/dev/null; then
-            kubectl annotate secret "${secret_name}" -n "${PLATFORM_NAMESPACE}" \
-                "meta.helm.sh/release-name=loft" \
-                "meta.helm.sh/release-namespace=${PLATFORM_NAMESPACE}" \
-                --overwrite 2>/dev/null || true
-            kubectl label secret "${secret_name}" -n "${PLATFORM_NAMESPACE}" \
-                "app.kubernetes.io/managed-by=Helm" \
-                --overwrite 2>/dev/null || true
-        fi
-    done
+# ============================================================
+# Phase 3: Check platform license and import vClusters
+# ============================================================
+echo ""
+echo "=== Phase 3: Importing vClusters into platform ==="
 
-    ${VCLUSTER_CLI} platform add cluster local-cluster \
-        --insecure \
-        --wait
-    ok "Host cluster 'local-cluster' added."
+# Check if the platform is activated by testing whether we can create
+# a VirtualClusterInstance (the license limit for unactivated instances is 0).
+LICENSE_OK=true
+LICENSE_RESPONSE=$(curl -sk "${PLATFORM_URL}/kubernetes/management/apis/management.loft.sh/v1/licenses/request" \
+    -H "Authorization: Bearer ${ACCESS_KEY}" 2>/dev/null)
+if echo "${LICENSE_RESPONSE}" | grep -q "instance-not-activated"; then
+    warn "Platform instance is not activated."
+    warn "Virtual cluster management requires an activated license."
+    warn "Activate at: ${PLATFORM_URL} (Settings > License)"
+    warn "Skipping vCluster import."
+    LICENSE_OK=false
+fi
+
+if [ "${LICENSE_OK}" = true ]; then
+    for entry in "${VCLUSTERS[@]}"; do
+        VC_NAME="${entry%%:*}"
+        VC_NS="${entry##*:}"
+
+        echo ""
+        info "Processing ${VC_NAME} in namespace ${VC_NS}..."
+
+        # Wait for vCluster StatefulSet
+        info "Waiting for StatefulSet ${VC_NAME} to be ready..."
+        kubectl wait statefulset/"${VC_NAME}" -n "${VC_NS}" \
+            --for=jsonpath='{.status.readyReplicas}'=1 --timeout=5m
+
+        # Check if already imported
+        if ${VCLUSTER_CLI} platform list vclusters --project "${PROJECT}" --insecure 2>/dev/null | grep -q "${VC_NAME}"; then
+            warn "${VC_NAME} already imported, skipping."
+            continue
+        fi
+
+        # Import vCluster using internal service address to avoid hairpin networking.
+        # --external=true (default) creates a platform secret in the vCluster namespace
+        # without modifying any Helm releases.
+        ${VCLUSTER_CLI} platform add vcluster "${VC_NAME}" \
+            --namespace "${VC_NS}" \
+            --project "${PROJECT}" \
+            --import-name "${VC_NAME}" \
+            --host "${PLATFORM_INTERNAL_HOST}" \
+            --insecure
+
+        ok "${VC_NAME} imported into platform."
+    done
 fi
 
 # ============================================================
-# Phase 4: Import vClusters as managed
+# Phase 4: Verification
 # ============================================================
 echo ""
-echo "=== Phase 4: Importing vClusters into platform ==="
+echo "=== Phase 4: Verification ==="
 
-for entry in "${VCLUSTERS[@]}"; do
-    VC_NAME="${entry%%:*}"
-    VC_NS="${entry##*:}"
+echo ""
+info "Platform clusters:"
+${VCLUSTER_CLI} platform list clusters 2>/dev/null || true
 
+if [ "${LICENSE_OK}" = true ]; then
     echo ""
-    info "Processing ${VC_NAME} in namespace ${VC_NS}..."
-
-    # Wait for vCluster StatefulSet
-    info "Waiting for StatefulSet ${VC_NAME} to be ready..."
-    kubectl wait statefulset/"${VC_NAME}" -n "${VC_NS}" \
-        --for=jsonpath='{.status.readyReplicas}'=1 --timeout=5m
-
-    # Check if already imported
-    if ${VCLUSTER_CLI} platform list vclusters --project "${PROJECT}" --insecure 2>/dev/null | grep -q "${VC_NAME}"; then
-        warn "${VC_NAME} already imported, skipping."
-        continue
-    fi
-
-    # Patch Helm ownership metadata on any existing secrets in the vCluster namespace
-    for secret_name in loft-agent-connection loft-agent-config loft-agent-token; do
-        if kubectl get secret "${secret_name}" -n "${VC_NS}" &>/dev/null; then
-            kubectl annotate secret "${secret_name}" -n "${VC_NS}" \
-                "meta.helm.sh/release-name=loft" \
-                "meta.helm.sh/release-namespace=${VC_NS}" \
-                --overwrite 2>/dev/null || true
-            kubectl label secret "${secret_name}" -n "${VC_NS}" \
-                "app.kubernetes.io/managed-by=Helm" \
-                --overwrite 2>/dev/null || true
-        fi
-    done
-
-    # Import vCluster as managed (not external)
-    ${VCLUSTER_CLI} platform add vcluster "${VC_NAME}" \
-        --namespace "${VC_NS}" \
-        --project "${PROJECT}" \
-        --import-name "${VC_NAME}" \
-        --insecure \
-        --external=false
-
-    ok "${VC_NAME} imported as managed."
-done
-
-# ============================================================
-# Phase 5: Verification
-# ============================================================
-echo ""
-echo "=== Phase 5: Verification ==="
-
-echo ""
-info "Platform vClusters:"
-${VCLUSTER_CLI} platform list vclusters --project "${PROJECT}" --insecure 2>/dev/null || true
+    info "Platform vClusters:"
+    ${VCLUSTER_CLI} platform list vclusters --project "${PROJECT}" 2>/dev/null || true
+fi
 
 echo ""
 echo "=== Platform bootstrap complete ==="
 echo ""
 echo "  Platform UI: ${PLATFORM_URL}"
 echo "  Credentials: ${ADMIN_USER} / ${ADMIN_PASSWORD}"
+if [ "${LICENSE_OK}" = false ]; then
+    echo ""
+    echo "  NOTE: Activate the platform to enable vCluster management."
+    echo "  Visit ${PLATFORM_URL} and follow the activation prompts."
+fi
 echo ""

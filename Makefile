@@ -50,7 +50,7 @@ remove-tenant: ## Remove a tenant. Usage: make remove-tenant TENANT_NAME=d
 
 GITHUB_USER ?= ovaleanu
 GITHUB_REPO ?= kind-vcluster-flux-poc
-GITHUB_BRANCH ?= main
+GITHUB_BRANCH ?= feat/vcluster-platform
 FLUX_INSTANCE ?= clusters/host-cluster/flux-instance.yaml
 .PHONY: deploy
 deploy: flux cluster-ctx ## Deploy Flux Operator and FluxInstance.
