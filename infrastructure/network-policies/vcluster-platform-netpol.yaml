@@ -44,6 +44,27 @@ spec:
         - protocol: TCP
           port: 53
 ---
+# Allow kube-apiserver to reach the loft APIService (aggregated API)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kube-apiserver
+  namespace: vcluster-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: loft
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8443
+        - protocol: TCP
+          port: 9443
+        - protocol: TCP
+          port: 9888
+---
 # Allow external access to vcluster-platform (LoadBalancer, browser UI)
 # Traffic from outside the cluster arrives via kube-proxy SNAT with pod CIDR source IPs.
 apiVersion: networking.k8s.io/v1
@@ -61,6 +82,8 @@ spec:
           port: 8080
         - protocol: TCP
           port: 10443
+        - protocol: TCP
+          port: 8443
         - protocol: TCP
           port: 9443
 ---
