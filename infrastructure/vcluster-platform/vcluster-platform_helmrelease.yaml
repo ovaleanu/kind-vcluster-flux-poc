@@ -3,13 +3,14 @@ kind: HelmRelease
 metadata:
   name: vcluster-platform
 spec:
+  releaseName: loft
   chart:
     spec:
       chart: vcluster-platform
       sourceRef:
         kind: HelmRepository
         name: loft
-      version: "4.4.0"
+      version: "4.6.1"
   interval: 2m
   timeout: 10m
   values:
@@ -24,4 +25,4 @@ spec:
     tls:
       enabled: true
     config:
-      loftHost: "localhost:9443"
+      loftHost: "172.18.0.219"
