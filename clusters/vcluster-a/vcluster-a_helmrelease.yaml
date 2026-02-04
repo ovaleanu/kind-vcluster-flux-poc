@@ -35,7 +35,9 @@ spec:
     exportKubeConfig:
       server: "https://vcluster-a.vcluster-a:443"
     external:
-      platform: {}
+      platform:
+        apiKey:
+          createRBAC: true
     sync:
       toHost:
         pods:
