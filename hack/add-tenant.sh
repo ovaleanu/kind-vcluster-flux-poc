@@ -41,7 +41,7 @@ if [[ $# -ne 2 ]]; then
     echo "  172.18.0.211  - vcluster-b"
     echo "  172.18.0.212  - Grafana"
     echo "  172.18.0.213  - Prometheus"
-    echo "  172.18.0.214  - vcluster-c"
+    echo "  172.18.0.219  - vcluster-platform"
     echo "  Pool range: 172.18.0.200-172.18.0.220"
     exit 1
 fi
@@ -145,8 +145,8 @@ spec:
       server: "https://${VCLUSTER}.${VCLUSTER}:443"
     external:
       platform:
-        apiServerHost: ${VCLUSTER_IP}
-        apiServerPort: 443
+        apiKey:
+          createRBAC: true
     sync:
       toHost:
         pods:

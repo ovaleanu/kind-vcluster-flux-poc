@@ -52,7 +52,7 @@ The e2e test validates:
 - Host cluster health
 - Flux GitOps reconciliation
 - Infrastructure (MetalLB, Traefik, cert-manager, Prometheus)
-- VClusters (vcluster-a, vcluster-b, vcluster-c)
+- VClusters (vcluster-a, vcluster-b)
 - Tenant workloads
 - HTTP routing
 - Network isolation between vClusters
@@ -74,7 +74,7 @@ The MetalLB pool is `172.18.0.200-172.18.0.220`. Current allocations:
 | vcluster-b | 172.18.0.211 |
 | Grafana | 172.18.0.212 |
 | Prometheus | 172.18.0.213 |
-| vcluster-c | 172.18.0.214 |
+| vcluster-platform | 172.18.0.219 |
 
 Pick an unused IP from the pool for each new tenant.
 
@@ -176,11 +176,8 @@ flux reconcile ks flux-system --with-source
                     |    |-- tenant-a.traefik.local           |
                     |    |     HTTPRoute -> nginx-x-default-x-vcluster-a
                     |    |                                    |
-                    |    |-- tenant-b.traefik.local           |
-                    |    |     HTTPRoute -> nginx-x-default-x-vcluster-b
-                    |    |                                    |
-                    |    `-- tenant-c.traefik.local           |
-                    |          HTTPRoute -> nginx-x-default-x-vcluster-c
+                    |    `-- tenant-b.traefik.local           |
+                    |          HTTPRoute -> nginx-x-default-x-vcluster-b
                     |                                         |
   Flux GitOps       |  vcluster-a (172.18.0.210)             |
   (auto-deploy) --> |    namespace: vcluster-a               |
@@ -189,10 +186,6 @@ flux reconcile ks flux-system --with-source
                     |  vcluster-b (172.18.0.211)             |
                     |    namespace: vcluster-b               |
                     |    synced svc: nginx-x-default-x-vcluster-b
-                    |                                         |
-                    |  vcluster-c (172.18.0.214)             |
-                    |    namespace: vcluster-c               |
-                    |    synced svc: nginx-x-default-x-vcluster-c
                     |                                         |
                     +-----------------------------------------+
 ```
@@ -256,7 +249,6 @@ The cluster uses Cilium CNI with NetworkPolicies to enforce tenant isolation. Ea
 # List NetworkPolicies per vcluster namespace
 kubectl get networkpolicies -n vcluster-a
 kubectl get networkpolicies -n vcluster-b
-kubectl get networkpolicies -n vcluster-c
 
 # Expected policies per namespace:
 #   deny-all-ingress            - Default deny all inbound traffic
@@ -281,11 +273,6 @@ kubectl get pods -l app=nginx -A -o wide
 kubectl run test-isolation --rm -i --restart=Never --image=busybox -n vcluster-a \
   -- wget -qO- --timeout=3 http://nginx-x-default-x-vcluster-b.vcluster-b.svc:80
 # Expected: "wget: download timed out" (blocked by NetworkPolicy)
-
-# Test: vcluster-a -> vcluster-c (should timeout)
-kubectl run test-isolation --rm -i --restart=Never --image=busybox -n vcluster-a \
-  -- wget -qO- --timeout=3 http://nginx-x-default-x-vcluster-c.vcluster-c.svc:80
-# Expected: "wget: download timed out"
 
 # Test: vcluster-b -> vcluster-a (should timeout)
 kubectl run test-isolation --rm -i --restart=Never --image=busybox -n vcluster-b \
@@ -330,10 +317,6 @@ curl -Lk --resolve tenant-b.traefik.local:80:${TRAEFIK_IP} \
   --resolve tenant-b.traefik.local:443:${TRAEFIK_IP} \
   http://tenant-b.traefik.local
 
-# Traefik -> tenant-c
-curl -Lk --resolve tenant-c.traefik.local:80:${TRAEFIK_IP} \
-  --resolve tenant-c.traefik.local:443:${TRAEFIK_IP} \
-  http://tenant-c.traefik.local
 ```
 
 ### Test External VCluster API Access (Should Work)
@@ -348,7 +331,6 @@ kubectl get pods -A
 # Or test the API directly via curl
 curl -sk https://172.18.0.210:443/healthz   # vcluster-a
 curl -sk https://172.18.0.211:443/healthz   # vcluster-b
-curl -sk https://172.18.0.214:443/healthz   # vcluster-c
 # Expected: "ok"
 ```
 

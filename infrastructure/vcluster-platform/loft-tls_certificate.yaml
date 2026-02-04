@@ -1,0 +1,17 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: loft-tls
+spec:
+  secretName: loft-tls
+  issuerRef:
+    name: selfsigned
+    kind: ClusterIssuer
+  dnsNames:
+    - localhost
+    - loft.vcluster-platform
+    - loft.vcluster-platform.svc
+    - loft.vcluster-platform.svc.cluster.local
+  ipAddresses:
+    - "127.0.0.1"
+    - "172.18.0.219"

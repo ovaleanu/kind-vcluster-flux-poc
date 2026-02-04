@@ -20,10 +20,8 @@ FAILED_TESTS=0
 CLUSTER_NAME="host-cluster"
 VCLUSTER_A="vcluster-a"
 VCLUSTER_B="vcluster-b"
-VCLUSTER_C="vcluster-c"
 TENANT_A_URL="http://tenant-a.traefik.local"
 TENANT_B_URL="http://tenant-b.traefik.local"
-TENANT_C_URL="http://tenant-c.traefik.local"
 TRAEFIK_URL="http://traefik.local"
 
 # Helper functions
@@ -245,27 +243,9 @@ test_vclusters() {
         "kubectl get svc -n $VCLUSTER_B $VCLUSTER_B -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null | grep -q '172.18.0.211'" \
         "vcluster-b has correct LoadBalancer IP"
 
-    # VCluster C
-    run_test "Check vcluster-c namespace exists" \
-        "kubectl get namespace $VCLUSTER_C &>/dev/null" \
-        "$VCLUSTER_C namespace exists"
-
-    run_test "Verify vcluster-c StatefulSet exists" \
-        "kubectl get statefulset -n $VCLUSTER_C $VCLUSTER_C &>/dev/null" \
-        "vcluster-c StatefulSet exists"
-
-    run_test "Verify vcluster-c pods are running" \
-        "kubectl get statefulset -n $VCLUSTER_C $VCLUSTER_C -o jsonpath='{.status.readyReplicas}' 2>/dev/null | grep -q '^1$'" \
-        "vcluster-c is running"
-
-    run_test "Check vcluster-c LoadBalancer IP" \
-        "kubectl get svc -n $VCLUSTER_C $VCLUSTER_C -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null | grep -q '172.18.0.214'" \
-        "vcluster-c has correct LoadBalancer IP"
-
     print_info "\nVCluster pods status:"
     kubectl get pods -n $VCLUSTER_A
     kubectl get pods -n $VCLUSTER_B
-    kubectl get pods -n $VCLUSTER_C
 }
 
 # Test 5: Tenant Workloads
@@ -298,28 +278,13 @@ test_tenant_workloads() {
         "kubectl get svc -n vcluster-b nginx-x-default-x-vcluster-b &>/dev/null" \
         "tenant-b nginx service is synced to host cluster"
 
-    # Tenant C
-    run_test "Check tenant-c namespace exists" \
-        "kubectl get namespace tenant-c &>/dev/null" \
-        "tenant-c namespace exists"
-
-    run_test "Check tenant-c HTTPRoute" \
-        "kubectl get httproute -n tenant-c nginx &>/dev/null" \
-        "tenant-c HTTPRoute exists"
-
-    run_test "Verify tenant-c nginx service synced from vcluster" \
-        "kubectl get svc -n vcluster-c nginx-x-default-x-vcluster-c &>/dev/null" \
-        "tenant-c nginx service is synced to host cluster"
-
     print_info "\nTenant HTTPRoutes status:"
     kubectl get httproutes -n tenant-a
     kubectl get httproutes -n tenant-b
-    kubectl get httproutes -n tenant-c
 
     print_info "\nSynced services from vclusters:"
     kubectl get svc -n vcluster-a | grep nginx || echo "No nginx service found in vcluster-a"
     kubectl get svc -n vcluster-b | grep nginx || echo "No nginx service found in vcluster-b"
-    kubectl get svc -n vcluster-c | grep nginx || echo "No nginx service found in vcluster-c"
 }
 
 # Test 6: HTTP Routes (End-to-End)
@@ -340,7 +305,7 @@ test_http_routes() {
     print_info "Using Traefik LoadBalancer IP: $TRAEFIK_IP"
 
     # curl flags: --resolve avoids /etc/hosts, -L follows HTTP->HTTPS redirect, -k accepts self-signed certs
-    local CURL_OPTS="--max-time 10 --connect-timeout 5 --resolve tenant-a.traefik.local:80:$TRAEFIK_IP --resolve tenant-a.traefik.local:443:$TRAEFIK_IP --resolve tenant-b.traefik.local:80:$TRAEFIK_IP --resolve tenant-b.traefik.local:443:$TRAEFIK_IP --resolve tenant-c.traefik.local:80:$TRAEFIK_IP --resolve tenant-c.traefik.local:443:$TRAEFIK_IP --resolve traefik.local:80:$TRAEFIK_IP --resolve traefik.local:443:$TRAEFIK_IP -L -k"
+    local CURL_OPTS="--max-time 10 --connect-timeout 5 --resolve tenant-a.traefik.local:80:$TRAEFIK_IP --resolve tenant-a.traefik.local:443:$TRAEFIK_IP --resolve tenant-b.traefik.local:80:$TRAEFIK_IP --resolve tenant-b.traefik.local:443:$TRAEFIK_IP --resolve traefik.local:80:$TRAEFIK_IP --resolve traefik.local:443:$TRAEFIK_IP -L -k"
 
     # Test Traefik endpoint
     run_test "Test Traefik endpoint accessibility" \
@@ -365,24 +330,12 @@ test_http_routes() {
         "curl -s $CURL_OPTS http://tenant-b.traefik.local 2>/dev/null | grep -q 'Welcome to nginx'" \
         "Tenant B nginx returns correct content"
 
-    # Test Tenant C
-    run_test "Test Tenant C nginx via HTTP" \
-        "curl -s -o /dev/null -w '%{http_code}' $CURL_OPTS http://tenant-c.traefik.local 2>/dev/null | grep -q '^200$'" \
-        "Tenant C nginx is accessible and responding with 200"
-
-    run_test "Verify Tenant C response content" \
-        "curl -s $CURL_OPTS http://tenant-c.traefik.local 2>/dev/null | grep -q 'Welcome to nginx'" \
-        "Tenant C nginx returns correct content"
-
     # Show full responses for manual inspection
     print_info "\nTenant A response:"
     curl -s $CURL_OPTS http://tenant-a.traefik.local 2>/dev/null | head -10 || echo "Failed to fetch"
 
     print_info "\nTenant B response:"
     curl -s $CURL_OPTS http://tenant-b.traefik.local 2>/dev/null | head -10 || echo "Failed to fetch"
-
-    print_info "\nTenant C response:"
-    curl -s $CURL_OPTS http://tenant-c.traefik.local 2>/dev/null | head -10 || echo "Failed to fetch"
 }
 
 # Test 7: Network Isolation

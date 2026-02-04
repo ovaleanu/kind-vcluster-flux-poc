@@ -34,13 +34,13 @@ Comprehensive end-to-end test suite that validates the entire deployment.
 - **Kube-Prometheus-Stack**: Prometheus StatefulSet
 
 #### Virtual Clusters
-- VCluster namespaces (vcluster-a, vcluster-b, vcluster-c)
+- VCluster namespaces (vcluster-a, vcluster-b)
 - VCluster StatefulSets
 - VCluster pod readiness
-- LoadBalancer IP assignments (172.18.0.210 for vcluster-a, 172.18.0.211 for vcluster-b, 172.18.0.214 for vcluster-c)
+- LoadBalancer IP assignments (172.18.0.210 for vcluster-a, 172.18.0.211 for vcluster-b)
 
 #### Tenant Workloads
-- Tenant namespaces (tenant-a, tenant-b, tenant-c)
+- Tenant namespaces (tenant-a, tenant-b)
 - HTTPRoute configurations
 - Nginx service sync from vclusters to host cluster
 
@@ -48,7 +48,6 @@ Comprehensive end-to-end test suite that validates the entire deployment.
 - Traefik endpoint accessibility
 - Tenant A nginx HTTP endpoint (http://tenant-a.traefik.local)
 - Tenant B nginx HTTP endpoint (http://tenant-b.traefik.local)
-- Tenant C nginx HTTP endpoint (http://tenant-c.traefik.local)
 - Response content validation
 - Uses `--resolve` flags to avoid `/etc/hosts` dependency
 
@@ -136,12 +135,10 @@ If VClusters are not ready:
 # Check VCluster status
 kubectl get statefulsets -n vcluster-a
 kubectl get statefulsets -n vcluster-b
-kubectl get statefulsets -n vcluster-c
 
 # Check VCluster logs
 kubectl logs -n vcluster-a statefulset/vcluster-a
 kubectl logs -n vcluster-b statefulset/vcluster-b
-kubectl logs -n vcluster-c statefulset/vcluster-c
 ```
 
 ### Network Isolation Test Failures
@@ -150,7 +147,6 @@ If cross-vcluster isolation tests fail:
 # Check NetworkPolicies are applied
 kubectl get networkpolicies -n vcluster-a
 kubectl get networkpolicies -n vcluster-b
-kubectl get networkpolicies -n vcluster-c
 
 # Verify Cilium is running
 kubectl get pods -n kube-system -l k8s-app=cilium
@@ -163,7 +159,7 @@ The entire stack is deployed correctly and functional:
 - Host cluster is healthy
 - Flux is reconciling successfully
 - All infrastructure components are running
-- All VClusters (a, b, c) are operational
+- All VClusters (a, b) are operational
 - Tenant workloads are accessible via HTTP
 - Network isolation between vclusters is enforced
 
@@ -192,7 +188,7 @@ The test suite provides comprehensive coverage:
 - Cluster provisioning and configuration
 - GitOps deployment via Flux
 - Infrastructure components (MetalLB, Traefik, cert-manager, Prometheus)
-- Virtual cluster multi-tenancy (vcluster-a, vcluster-b, vcluster-c)
+- Virtual cluster multi-tenancy (vcluster-a, vcluster-b)
 - Tenant workload deployment
 - Network routing and ingress
 - End-to-end HTTP connectivity

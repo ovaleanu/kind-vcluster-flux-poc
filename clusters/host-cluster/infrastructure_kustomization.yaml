@@ -171,7 +171,6 @@ spec:
     - name: cilium
     - name: vcluster-a
     - name: vcluster-b
-    - name: vcluster-c
     - name: vcluster-platform
   interval: 2m
   sourceRef:

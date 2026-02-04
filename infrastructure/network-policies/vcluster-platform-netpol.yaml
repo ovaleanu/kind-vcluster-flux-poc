@@ -138,7 +138,6 @@ spec:
                 values:
                   - vcluster-a
                   - vcluster-b
-                  - vcluster-c
       ports:
         - protocol: TCP
           port: 8080
