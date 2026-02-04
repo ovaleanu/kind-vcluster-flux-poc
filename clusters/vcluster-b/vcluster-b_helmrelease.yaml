@@ -35,9 +35,7 @@ spec:
     exportKubeConfig:
       server: "https://vcluster-b.vcluster-b:443"
     external:
-      platform:
-        apiServerHost: 172.18.0.211
-        apiServerPort: 443
+      platform: {}
     sync:
       toHost:
         pods:
