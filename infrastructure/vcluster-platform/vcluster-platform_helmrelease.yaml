@@ -22,4 +22,4 @@ spec:
       annotations:
         metallb.universe.tf/loadBalancerIPs: 172.18.0.219
     config:
-      loftHost: "172.18.0.219"
+      loftHost: "localhost:9443"
