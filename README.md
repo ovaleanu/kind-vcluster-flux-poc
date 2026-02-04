@@ -361,6 +361,55 @@ Then open http://localhost:12000 in your browser.
 
 ---
 
+## vCluster Platform
+
+The [vCluster Platform](https://www.vcluster.com/docs/platform) provides a management UI and API for all virtual clusters. It is deployed via Flux as a HelmRelease in the `vcluster-platform` namespace and exposed on MetalLB IP `172.18.0.219`.
+
+The `make install` target runs `hack/setup-platform.sh` which automatically:
+1. Waits for the platform to be healthy
+2. Configures CLI access (obtains an access key via the API)
+3. Imports vcluster-a and vcluster-b into the platform (requires an active license)
+
+### Accessing the Platform UI
+
+Since MetalLB IPs are on Docker's internal network, use port-forward:
+
+```bash
+kubectl port-forward -n vcluster-platform svc/loft 9443:443
+```
+
+Then open https://localhost:9443 in your browser.
+
+**Credentials:** `admin` / `admin`
+
+### Managing vClusters in the Platform
+
+After adding a new tenant with `make add-tenant`, import it into the platform:
+
+```bash
+./bin/vcluster platform add vcluster <name> \
+    --namespace <name> \
+    --project default \
+    --import-name <name> \
+    --host "https://loft.vcluster-platform.svc:443" \
+    --insecure
+```
+
+To remove a vcluster from the platform (does not delete the vcluster itself):
+
+```bash
+kubectl delete virtualclusterinstance <name> -n p-default
+```
+
+To list managed vclusters:
+
+```bash
+./bin/vcluster platform list vclusters --project default
+```
+
+> **Note:** Importing vclusters requires an activated platform license. Without a license the platform UI is accessible but vcluster management is disabled. Visit the platform UI to activate.
+
+---
+
 REF: https://github.com/loft-sh/vcluster
 
-[Credits](https://github.com/mmontes11/vcluster-poc)

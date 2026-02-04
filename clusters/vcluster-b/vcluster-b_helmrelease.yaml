@@ -52,9 +52,3 @@ spec:
           enabled: true
         persistentVolumeClaims:
           enabled: true
-      fromHost:
-        nodes:
-          enabled: true
-          syncBackChanges: false
-        storageClasses:
-          enabled: true
