@@ -25,3 +25,17 @@ spec:
   to:
     - group: ""
       kind: Service
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-tenant-d-to-vcluster-d
+  namespace: vcluster-d
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: tenant-d
+  to:
+    - group: ""
+      kind: Service
