@@ -172,7 +172,6 @@ spec:
     - name: vcluster-a
     - name: vcluster-b
     - name: vcluster-platform
-    - name: vcluster-d
   interval: 2m
   sourceRef:
     kind: GitRepository
